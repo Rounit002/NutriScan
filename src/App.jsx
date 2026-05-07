@@ -1,0 +1,479 @@
+import { useState, useEffect } from 'react';
+import Home from './components/Home';
+import Results from './components/Results';
+import Profile from './components/Profile';
+import History from './components/History';
+import Compare from './components/Compare';
+import LoadingState from './components/LoadingState';
+import Login from './components/Login';
+import SignUp from './components/SignUp';
+import Dashboard from './components/Dashboard';
+import Onboarding from './components/Onboarding';
+import BarcodeScanner from './components/BarcodeScanner';
+import StreakLeaderboard from './components/StreakLeaderboard';
+import FeatureRequests from './components/FeatureRequests';
+import FoodDatabase from './components/FoodDatabase';
+import { analyzeFoodImage, analyzeFoodText } from './geminiService';
+import { useTheme } from './components/ThemeToggle';
+
+/**
+ * Downscale a base64 image to a small thumbnail for storage.
+ * Returns a base64 JPEG string ~120x120px.
+ * Falls back to the original base64 (truncated) if canvas downscaling fails.
+ */
+function generateThumbnail(base64, maxSize = 120) {
+  return new Promise((resolve) => {
+    if (!base64 || typeof base64 !== 'string') {
+      console.warn('[Thumbnail] No base64 data provided');
+      return resolve(null);
+    }
+
+    // Safety timeout — resolve with the raw base64 if Image never loads
+    const timeout = setTimeout(() => {
+      console.warn('[Thumbnail] Timed out — using original image as fallback');
+      resolve(base64);
+    }, 5000);
+
+    try {
+      const img = new Image();
+      img.onload = () => {
+        clearTimeout(timeout);
+        try {
+          const canvas = document.createElement('canvas');
+          let w = img.width, h = img.height;
+          if (w > h) { h = Math.round((h / w) * maxSize); w = maxSize; }
+          else { w = Math.round((w / h) * maxSize); h = maxSize; }
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          const result = canvas.toDataURL('image/jpeg', 0.7);
+          console.log('[Thumbnail] Generated:', result.length, 'chars');
+          resolve(result);
+        } catch (canvasErr) {
+          console.error('[Thumbnail] Canvas error:', canvasErr);
+          resolve(base64);
+        }
+      };
+      img.onerror = (err) => {
+        clearTimeout(timeout);
+        console.error('[Thumbnail] Image load error:', err);
+        // Fallback: use the original base64 so we at least save something
+        resolve(base64);
+      };
+      img.src = base64;
+    } catch (err) {
+      clearTimeout(timeout);
+      console.error('[Thumbnail] Unexpected error:', err);
+      resolve(base64);
+    }
+  });
+}
+
+export default function App() {
+  const { isDark, toggle: toggleTheme } = useTheme();
+  // If a token exists, start in 'restoring' state instead of 'login' to avoid flash
+  const hasToken = Boolean(localStorage.getItem('nutriscan_token'));
+  const [currentView, setCurrentView] = useState(hasToken ? 'restoring' : 'login');
+  const [userAuth, setUserAuth] = useState(null);
+  const [authToken, setToken] = useState(() => {
+    const saved = localStorage.getItem('nutriscan_token');
+    return saved && saved !== "undefined" ? saved : null;
+  });
+  const [userProfile, setUserProfile] = useState(() => {
+    try {
+      const saved = localStorage.getItem('nutriscan_profile');
+      return saved && saved !== "undefined" ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const [error, setError] = useState(null);
+
+
+  useEffect(() => {
+    if (authToken && !userAuth) {
+      fetchUserData();
+    } else if (!authToken && currentView !== 'signup') {
+      setCurrentView('login');
+    }
+  }, [authToken]);
+
+  const fetchUserData = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/auth/me', {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUserAuth(data.user);
+        setUserProfile(data.user.profile);
+        localStorage.setItem('nutriscan_profile', JSON.stringify(data.user.profile));
+        setCurrentView(data.user.profile ? 'dashboard' : 'onboarding');
+      } else {
+        handleLogout();
+      }
+    } catch (err) {
+      console.error('Failed to fetch user data:', err);
+      handleLogout();
+    }
+  };
+
+  const handleLogin = (user, token) => {
+    setUserAuth(user);
+    setToken(token);
+    setUserProfile(user.profile);
+    localStorage.setItem('nutriscan_token', token);
+    localStorage.setItem('nutriscan_profile', JSON.stringify(user.profile));
+    setCurrentView(user.profile ? 'dashboard' : 'onboarding');
+  };
+
+  const handleLogout = () => {
+    setToken(null);
+    setUserAuth(null);
+    setUserProfile(null);
+    localStorage.removeItem('nutriscan_token');
+    localStorage.removeItem('nutriscan_profile');
+    setCurrentView('login');
+  };
+
+
+
+  const handleOnboardingComplete = async (profile) => {
+    setUserProfile(profile);
+    localStorage.setItem('nutriscan_profile', JSON.stringify(profile));
+
+    if (authToken) {
+      try {
+        await fetch('http://localhost:5000/auth/profile', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ profile })
+        });
+      } catch (err) {
+        console.error('Failed to save profile to server:', err);
+      }
+    }
+    setCurrentView('dashboard');
+  };
+
+  const refreshStreak = async () => {
+    if (!authToken) return;
+    try {
+      const response = await fetch('http://localhost:5000/auth/me', {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUserAuth(data.user);
+      }
+    } catch (err) {
+      console.error('Failed to refresh streak:', err);
+    }
+  };
+
+  const handleResetProfile = () => {
+    setUserProfile(null);
+    localStorage.removeItem('nutriscan_profile');
+    setCurrentView('onboarding');
+  };
+
+  const handleUserDetailsUpdated = (updatedUser) => {
+    if (!updatedUser) return;
+    setUserAuth(updatedUser);
+    setUserProfile(updatedUser.profile);
+    localStorage.setItem('nutriscan_profile', JSON.stringify(updatedUser.profile));
+  };
+
+  const handleImageSelected = async (imageBase64) => {
+    setCurrentView('loading');
+    setError(null);
+    try {
+      // We'll send the high-quality image to the backend for Cloudinary upload
+      // but we still generate a small thumbnail for immediate UI feedback if needed
+      const thumbnail = await generateThumbnail(imageBase64);
+
+      const result = await analyzeFoodImage(imageBase64, userProfile);
+      setAnalysisResult(result);
+      setCurrentView('results');
+
+      if (authToken) {
+        // Send the full imageBase64 for Cloudinary storage
+        await fetch('http://localhost:5000/scans', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            productName: result.productName,
+            brand: result.brand,
+            score: result.score,
+            verdict: JSON.stringify(result.verdict),
+            explanation: '',
+            ingredients: JSON.stringify(result.ingredientsAnalysis),
+            alternatives: result.alternatives,
+            sideEffects: result.sideEffects,
+            imageUrl: imageBase64, // Use full image for Cloudinary
+            productData: {
+              product_name: result.productName,
+              brands: result.brand,
+              ingredients_text: result.ingredientsAnalysis?.map((item) => item.name).join(', ') || ''
+            }
+          })
+        });
+        refreshStreak();
+      }
+    } catch (err) {
+      console.error(err);
+      const msg = err.message?.includes('Rate limited') || err.message?.includes('wait')
+        ? err.message
+        : "Analysis failed. Gemini might be busy. Try again!";
+      setError(msg);
+      setCurrentView('home');
+    }
+  };
+
+  const handleBarcodeScanned = async (barcode) => {
+    setCurrentView('loading');
+    setError(null);
+    try {
+      const response = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
+      const data = await response.json();
+
+      if (data.status === 1) {
+        // Use the product image from Open Food Facts if available
+        const productImageUrl = data.product?.image_front_small_url
+          || data.product?.image_front_url
+          || data.product?.image_url
+          || null;
+
+        const result = await analyzeFoodText(data.product, userProfile);
+        setAnalysisResult(result);
+        setCurrentView('results');
+
+        if (authToken) {
+          await fetch('http://localhost:5000/scans', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({
+              productName: result.productName,
+              brand: result.brand,
+              score: result.score,
+              verdict: JSON.stringify(result.verdict),
+              explanation: '',
+              ingredients: JSON.stringify(result.ingredientsAnalysis),
+              alternatives: result.alternatives,
+              sideEffects: result.sideEffects,
+              imageUrl: productImageUrl,
+              productData: data.product
+            })
+          });
+          refreshStreak();
+        }
+      } else {
+        throw new Error("Product not found.");
+      }
+    } catch (err) {
+      console.error(err);
+      const msg = err.message?.includes('Rate limited') || err.message?.includes('wait')
+        ? err.message
+        : "Product scan failed. Try a photo instead!";
+      setError(msg);
+      setCurrentView('home');
+    }
+  };
+
+  const handleDatabaseProductSelected = async (product) => {
+    setCurrentView('loading');
+    setError(null);
+    try {
+      // Use the product image from Open Food Facts raw data if available
+      const productImageUrl = product?.image_front_small_url
+        || product?.image_front_url
+        || product?.image_url
+        || null;
+
+      const result = await analyzeFoodText(product, userProfile);
+      setAnalysisResult(result);
+      setCurrentView('results');
+
+      if (authToken) {
+        await fetch('http://localhost:5000/scans', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            productName: result.productName,
+            brand: result.brand,
+            score: result.score,
+            verdict: JSON.stringify(result.verdict),
+            explanation: '',
+            ingredients: JSON.stringify(result.ingredientsAnalysis),
+            alternatives: result.alternatives,
+            sideEffects: result.sideEffects,
+            imageUrl: productImageUrl,
+            productData: product.rawProductData || product
+          })
+        });
+        refreshStreak();
+      }
+    } catch (err) {
+      console.error(err);
+      const msg = err.message?.includes('Rate limited') || err.message?.includes('wait')
+        ? err.message
+        : "Product analysis failed. Try another product!";
+      setError(msg);
+      setCurrentView('foodDatabase');
+    }
+  };
+
+  const handleBackToHome = () => {
+    setAnalysisResult(null);
+    setCurrentView('dashboard');
+  };
+
+  return (
+    <main id="root" className="animate-fade-in-up">
+      {error && (
+        <div className="fixed top-6 left-6 right-6 z-[200] animate-streak-pop">
+          <div className="bg-error/90 backdrop-blur-xl text-white p-4 rounded-2xl text-xs font-black uppercase tracking-widest flex justify-between items-center shadow-2xl">
+            <span>{error}</span>
+            <button className="bg-white/20 px-3 py-1.5 rounded-lg hover:bg-white/30 transition-colors" onClick={() => setError(null)}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Splash screen while restoring session */}
+      {currentView === 'restoring' && (
+        <div className="flex flex-col items-center justify-center min-h-screen gap-6 animate-fade-in-up"
+          style={{ background: 'var(--ns-surface)' }}>
+          <div className="w-20 h-20 rounded-[24px] flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg,#006c49,#10B981)', boxShadow: '0 12px 40px rgba(0,108,73,0.3)' }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="white"><path d="M17 8C8 10 5.9 16.17 3.82 19.17C5 21 7 21 8 21C8 21 10 18 12 16C16 15 19 13 20 9L17 8Z" /><path d="M8.5 11.5C10.5 8.5 15 6 19 7C19 7 19 11 16 13C13 15 10 15 8 17C8 17 6.5 13.5 8.5 11.5Z" opacity="0.6" /></svg>
+          </div>
+          <div className="w-8 h-8 rounded-full animate-spin"
+            style={{ border: '3px solid var(--ns-surface-high)', borderTopColor: 'var(--ns-primary)' }} />
+          <p className="text-sm font-medium" style={{ color: 'var(--ns-outline)', fontFamily: 'var(--font-main)' }}>Loading NutriScan...</p>
+        </div>
+      )}
+
+      {currentView === 'login' && <Login onLogin={handleLogin} onNavigateSignup={() => setCurrentView('signup')} />}
+      {currentView === 'signup' && <SignUp onLogin={handleLogin} onNavigateLogin={() => setCurrentView('login')} />}
+
+      {currentView === 'onboarding' && (
+        <Onboarding
+          onComplete={handleOnboardingComplete}
+          initialProfile={userProfile}
+          userAuth={userAuth}
+          authToken={authToken}
+          onBack={() => userProfile ? setCurrentView('profile') : handleLogout()}
+        />
+      )}
+
+      {currentView === 'dashboard' && (
+        <Dashboard
+          userAuth={userAuth}
+          userProfile={userProfile}
+          authToken={authToken}
+          onNavigate={(view) => setCurrentView(view)}
+          isDark={isDark}
+          toggleTheme={toggleTheme}
+          onLogout={handleLogout}
+        />
+      )}
+
+      {currentView === 'streak' && (
+        <StreakLeaderboard
+          userAuth={userAuth}
+          authToken={authToken}
+          onBack={() => setCurrentView('dashboard')}
+        />
+      )}
+
+      {currentView === 'profile' && (
+        <Profile
+          userProfile={userProfile}
+          userAuth={userAuth}
+          authToken={authToken}
+          onBack={() => setCurrentView('dashboard')}
+          onDelete={() => handleResetProfile()}
+          onLogout={handleLogout}
+          onDetailsSaved={handleUserDetailsUpdated}
+          onNavigateFeatures={() => setCurrentView('features')}
+          isDark={isDark}
+          toggleTheme={toggleTheme}
+        />
+      )}
+
+      {currentView === 'features' && (
+        <FeatureRequests
+          userAuth={userAuth}
+          authToken={authToken}
+          onBack={() => setCurrentView('profile')}
+        />
+      )}
+
+      {currentView === 'history' && (
+        <History
+          authToken={authToken}
+          onBack={() => setCurrentView('dashboard')}
+          onViewDetail={(result) => {
+            setAnalysisResult(result);
+            setCurrentView('results');
+          }}
+        />
+      )}
+
+      {currentView === 'compare' && (
+        <Compare
+          authToken={authToken}
+          onBack={() => setCurrentView('dashboard')}
+        />
+      )}
+
+      {currentView === 'foodDatabase' && (
+        <FoodDatabase
+          authToken={authToken}
+          onBack={() => setCurrentView('dashboard')}
+          onSelectProduct={handleDatabaseProductSelected}
+        />
+      )}
+
+      {currentView === 'home' && (
+        <Home
+          onImageSelected={handleImageSelected}
+          onNavigateProfile={() => setCurrentView('profile')}
+          onBack={() => setCurrentView('dashboard')}
+          onNavigateBarcode={() => setCurrentView('barcode')}
+        />
+      )}
+
+      {currentView === 'barcode' && (
+        <BarcodeScanner
+          onScan={handleBarcodeScanned}
+          onBack={() => setCurrentView('home')}
+        />
+      )}
+
+      {currentView === 'loading' && <LoadingState />}
+
+      {currentView === 'results' && analysisResult && (
+        <Results
+          result={analysisResult}
+          onBack={handleBackToHome}
+        />
+      )}
+    </main>
+  );
+}

@@ -1,0 +1,168 @@
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, History as HistoryIcon, Search, Scale } from 'lucide-react';
+
+const parseJsonField = (value, fallback) => {
+  if (!value) return fallback;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
+
+export default function History({ authToken, onBack, onViewDetail }) {
+  const [scans, setScans] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadHistory = async () => {
+      if (!authToken) {
+        setIsLoading(false);
+        setError('Not authenticated.');
+        return;
+      }
+
+      try {
+        const response = await fetch('http://localhost:5000/scans', {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        if (!response.ok) throw new Error('Failed to load history');
+        const data = await response.json();
+        if (isMounted) setScans(Array.isArray(data) ? data : []);
+      } catch (loadError) {
+        console.error(loadError);
+        if (isMounted) setError('Failed to load your scan history.');
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    loadHistory();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authToken]);
+
+  const filteredScans = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return scans;
+
+    return scans.filter((scan) => (
+      (scan.product_name || '').toLowerCase().includes(query)
+      || (scan.brand || '').toLowerCase().includes(query)
+      || String(scan.score || '').includes(query)
+    ));
+  }, [scans, searchTerm]);
+
+  const handleScanClick = (scan) => {
+    onViewDetail({
+      productName: scan.product_name || 'Product',
+      brand: scan.brand || 'Unknown Brand',
+      score: scan.score,
+      verdict: parseJsonField(scan.verdict, scan.verdict),
+      explanation: scan.explanation,
+      ingredientsAnalysis: parseJsonField(scan.ingredients, []),
+      alternatives: parseJsonField(scan.alternatives, []),
+      sideEffects: parseJsonField(scan.side_effects, []),
+    });
+  };
+
+  const scoreColor = (score) => {
+    if (score >= 8) return '#10B981';
+    if (score >= 5) return '#fd761a';
+    return '#ba1a1a';
+  };
+
+  return (
+    <div className="history-page">
+      <section className="history-phone-shell" aria-label="History">
+        <header className="history-topbar">
+          <button type="button" onClick={onBack} aria-label="Back">
+            <ArrowLeft size={20} />
+          </button>
+          <h1>History</h1>
+          <span />
+        </header>
+
+        <div className="history-search-bar">
+          <Search size={18} />
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search"
+            aria-label="Search history"
+          />
+        </div>
+
+        {isLoading ? (
+          <div className="history-state">
+            <div className="history-spinner" />
+            <span>Loading history...</span>
+          </div>
+        ) : error ? (
+          <div className="history-state is-error">
+            <HistoryIcon size={24} />
+            <span>{error}</span>
+          </div>
+        ) : filteredScans.length === 0 ? (
+          <div className="history-state">
+            <HistoryIcon size={28} />
+            <strong>No history found</strong>
+            <span>{searchTerm ? 'Try a different search.' : 'Scan a product to create your first log.'}</span>
+          </div>
+        ) : (
+          <div className="history-list" aria-label="History entries">
+            {filteredScans.map((scan) => {
+              const recordedAt = scan.created_at ? new Date(scan.created_at) : null;
+              const dateLabel = recordedAt && !Number.isNaN(recordedAt.getTime())
+                ? recordedAt.toLocaleString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : 'Date unavailable';
+              const color = scoreColor(scan.score);
+
+              return (
+                <button
+                  className="history-entry-card"
+                  type="button"
+                  key={scan.id}
+                  onClick={() => handleScanClick(scan)}
+                >
+                  {scan.image_url ? (
+                    <span className="history-entry-thumb">
+                      <img
+                        src={scan.image_url}
+                        alt={scan.product_name || 'Product'}
+                        onError={(e) => { e.currentTarget.parentElement.innerHTML = `<span class="history-entry-indicator" style="background:${color}"><svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg></span>`; }}
+                      />
+                    </span>
+                  ) : (
+                    <span className="history-entry-indicator" style={{ background: color }}>
+                      <Scale size={17} />
+                    </span>
+                  )}
+                  <span className="history-entry-copy">
+                    <strong>{scan.product_name || 'current Weight'}</strong>
+                    <small>{dateLabel}</small>
+                  </span>
+                  <span className="history-entry-value">{scan.score || '--'}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
