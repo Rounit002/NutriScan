@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
+  Camera,
   ChevronRight,
   Check,
   Crown,
@@ -20,7 +22,7 @@ import {
   X,
 } from 'lucide-react';
 
-export const healthIssues = [
+const healthIssues = [
   'Acid Reflux / GERD',
   'Acne',
   'ADHD',
@@ -91,7 +93,7 @@ export const healthIssues = [
   'Vitamin D Deficiency',
 ];
 
-export const healthGoalsList = [
+const healthGoalsList = [
   'Lose Weight',
   'Maintain Weight',
   'Gain Healthy Weight',
@@ -129,9 +131,9 @@ export const healthGoalsList = [
   'Balanced Nutrition',
 ];
 
-export const severityLevels = ['Low', 'Medium', 'High'];
+const severityLevels = ['Low', 'Medium', 'High'];
 
-export const normalizeCondition = (condition) => {
+const normalizeCondition = (condition) => {
   if (typeof condition === 'string') {
     return { name: condition, severity: 'Medium' };
   }
@@ -141,6 +143,13 @@ export const normalizeCondition = (condition) => {
     severity: severityLevels.includes(condition?.severity) ? condition.severity : 'Medium',
   };
 };
+
+const profileLanguages = [
+  { code: 'en', label: 'English' },
+  { code: 'hi', label: 'हिन्दी' },
+  { code: 'es', label: 'Español' },
+  { code: 'de', label: 'Deutsch' },
+];
 
 function ProfileSection({ title, children }) {
   return (
@@ -158,7 +167,11 @@ function ProfileAction({ label, icon: Icon, onClick, danger = false }) {
       type="button"
       onClick={onClick}
     >
-      {Icon && <Icon size={17} />}
+      {Icon && (
+        <span className="profile-action-icon" aria-hidden="true">
+          <Icon size={17} />
+        </span>
+      )}
       <span>{label}</span>
       <ChevronRight size={16} />
     </button>
@@ -177,6 +190,33 @@ function ProfileModal({ title, children, onClose }) {
       </div>
     </div>
   );
+}
+
+function compressProfileImage(file, maxSize = 320, quality = 0.76) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const image = new Image();
+
+      image.onload = () => {
+        const scale = Math.min(maxSize / image.width, maxSize / image.height, 1);
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(image, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+
+      image.onerror = () => reject(new Error('Could not load selected image'));
+      image.src = reader.result;
+    };
+
+    reader.onerror = () => reject(new Error('Could not read selected image'));
+    reader.readAsDataURL(file);
+  });
 }
 
 const personalFields = [
@@ -203,8 +243,6 @@ export function PersonalDetailsPage({
   authToken,
   onBack,
   onDetailsSaved,
-  onNext,
-  isOnboarding = false,
 }) {
   const [details, setDetails] = useState(() => ({
     name: userAuth?.name || '',
@@ -351,7 +389,6 @@ export function MedicalProfilePage({
   authToken,
   onBack,
   onDetailsSaved,
-  onNext,
   isOnboarding = false,
 }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -527,7 +564,6 @@ export function HealthGoalsPage({
   authToken,
   onBack,
   onDetailsSaved,
-  onNext,
   isOnboarding = false,
 }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -667,12 +703,17 @@ export function HealthGoalsPage({
 }
 
 export default function Profile({ userProfile, userAuth, authToken, onBack, onDelete, onLogout, onDetailsSaved, onNavigateFeatures, isDark, toggleTheme }) {
+  const { t, i18n } = useTranslation();
   const [modal, setModal] = useState(null);
   const [view, setView] = useState('menu');
-  const [language, setLanguage] = useState(() => localStorage.getItem('fitscan_language') || 'English');
+  const [language, setLanguage] = useState(() => i18n.resolvedLanguage || i18n.language || 'en');
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState('');
+  const fileInputRef = useRef(null);
 
-  const ageLabel = userProfile?.age ? `${userProfile.age}` : 'Age';
+  const ageLabel = userProfile?.age ? `${userProfile.age}` : t('age');
   const displayName = userAuth?.name || userProfile?.name || 'Name';
+  const profileImageUrl = userProfile?.profileImageUrl || userProfile?.avatarUrl || userProfile?.photoUrl || '';
   const initials = useMemo(() => {
     return displayName
       .split(' ')
@@ -682,9 +723,10 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
       .join('') || 'FS';
   }, [displayName]);
 
-  const handleLanguageChange = (nextLanguage) => {
-    setLanguage(nextLanguage);
-    localStorage.setItem('fitscan_language', nextLanguage);
+  const handleLanguageChange = (nextLanguageCode) => {
+    i18n.changeLanguage(nextLanguageCode);
+    setLanguage(nextLanguageCode);
+    localStorage.setItem('fitscan_language', nextLanguageCode);
   };
 
   const handleDelete = () => {
@@ -695,6 +737,53 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
 
   const mailSupport = () => {
     window.location.href = 'mailto:support@fitscan.app?subject=FitScan%20Support';
+  };
+
+  const handleProfilePhotoChange = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Please select an image file.');
+      event.target.value = '';
+      return;
+    }
+
+    const uploadCompressedImage = async () => {
+      setIsUploadingPhoto(true);
+      setPhotoError('');
+
+      try {
+        if (!authToken) throw new Error('Missing auth token');
+        const compressedImage = await compressProfileImage(file);
+        console.log('[Profile photo upload] compressed image size:', compressedImage.length);
+
+        const response = await fetch('http://localhost:5000/auth/profile-picture', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({ imageBase64: compressedImage }),
+        });
+
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => ({}));
+          throw new Error(errorBody.error || `Upload failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        onDetailsSaved?.(data.user);
+      } catch (error) {
+        console.error('[Profile photo upload]', error);
+        setPhotoError('Could not save profile picture. Please try again.');
+      } finally {
+        setIsUploadingPhoto(false);
+        event.target.value = '';
+      }
+    };
+
+    uploadCompressedImage();
   };
 
   if (view === 'personal') {
@@ -735,53 +824,77 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
     <div className="profile-page">
       <section className="profile-phone-shell" aria-label="Profile">
         <header className="profile-topbar">
-          <button type="button" onClick={onBack} aria-label="Back">
+          <button type="button" onClick={onBack} aria-label={t('back')}>
             <ArrowLeft size={20} />
           </button>
-          <h1>Profile</h1>
+          <h1>{t('profile')}</h1>
           <span />
         </header>
 
         <section className="profile-hero">
-          <div className="profile-avatar" aria-label="Profile image">
-            <span>{initials}</span>
-          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="profile-photo-input"
+            onChange={handleProfilePhotoChange}
+          />
+          <button
+            className={`profile-avatar${profileImageUrl ? ' has-image' : ''}`}
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploadingPhoto}
+            aria-label={t('upload_profile_picture')}
+          >
+            {profileImageUrl ? (
+              <img src={profileImageUrl} alt={`${displayName} profile`} />
+            ) : (
+              <span>{initials}</span>
+            )}
+            <em>
+              <Camera size={14} />
+            </em>
+            {isUploadingPhoto && <i>{t('uploading')}</i>}
+          </button>
+          {photoError && <p className="profile-photo-error">{photoError}</p>}
           <div className="profile-name-row">
             <strong>{displayName}</strong>
             <span>{ageLabel}</span>
           </div>
           <button className="profile-upgrade-button" type="button" onClick={() => setModal('upgrade')}>
             <Crown size={17} />
-            <span>Upgrade</span>
+            <span>{t('upgrade')}</span>
           </button>
         </section>
 
-        <ProfileSection title="Account">
-          <ProfileAction label="Personal Detail" icon={User} onClick={() => setView('personal')} />
-          <ProfileAction label={`Language: ${language}`} icon={Languages} onClick={() => setModal('language')} />
-          <div className="profile-theme-toggle" onClick={toggleTheme} role="button" tabIndex={0} aria-label="Toggle dark mode">
-            <Moon size={17} />
-            <span>Dark Mode</span>
+        <ProfileSection title={t('account')}>
+          <ProfileAction label={t('personal_detail')} icon={User} onClick={() => setView('personal')} />
+          <ProfileAction label={`${t('language')}: ${profileLanguages.find((option) => option.code === language)?.label || 'English'}`} icon={Languages} onClick={() => setModal('language')} />
+          <div className="profile-theme-toggle" onClick={toggleTheme} role="button" tabIndex={0} aria-label={t('dark_mode')}>
+            <span className="profile-action-icon" aria-hidden="true">
+              <Moon size={17} />
+            </span>
+            <span>{t('dark_mode')}</span>
             <span className={`profile-theme-switch${isDark ? ' is-active' : ''}`} aria-hidden="true" />
           </div>
         </ProfileSection>
 
-        <ProfileSection title="Goals & Tracking">
-          <ProfileAction label="Edit Medical Profile" icon={HeartPulse} onClick={() => setView('medical')} />
-          <ProfileAction label="Edit Health Goal" icon={Sparkles} onClick={() => setView('goals')} />
-          <ProfileAction label="Upgrade to Family Plan" icon={Crown} onClick={() => setModal('family')} />
+        <ProfileSection title={t('goals_tracking')}>
+          <ProfileAction label={t('edit_medical_profile')} icon={HeartPulse} onClick={() => setView('medical')} />
+          <ProfileAction label={t('edit_health_goal')} icon={Sparkles} onClick={() => setView('goals')} />
+          <ProfileAction label={t('upgrade_family_plan')} icon={Crown} onClick={() => setModal('family')} />
         </ProfileSection>
 
-        <ProfileSection title="Support & Legal">
-          <ProfileAction label="Request a Feature" icon={Globe2} onClick={onNavigateFeatures} />
-          <ProfileAction label="Support Email" icon={Mail} onClick={mailSupport} />
-          <ProfileAction label="Terms & Condition" icon={ShieldCheck} onClick={() => setModal('terms')} />
-          <ProfileAction label="Privacy Policy" icon={LifeBuoy} onClick={() => setModal('privacy')} />
+        <ProfileSection title={t('support_legal')}>
+          <ProfileAction label={t('request_feature')} icon={Globe2} onClick={onNavigateFeatures} />
+          <ProfileAction label={t('support_email')} icon={Mail} onClick={mailSupport} />
+          <ProfileAction label={t('terms_condition')} icon={ShieldCheck} onClick={() => setModal('terms')} />
+          <ProfileAction label={t('privacy_policy')} icon={LifeBuoy} onClick={() => setModal('privacy')} />
         </ProfileSection>
 
-        <ProfileSection title="Account Action">
-          <ProfileAction label="Logout" icon={LogOut} onClick={onLogout} />
-          <ProfileAction label="Delete Account" icon={Trash2} onClick={handleDelete} danger />
+        <ProfileSection title={t('account_action')}>
+          <ProfileAction label={t('logout')} icon={LogOut} onClick={onLogout} />
+          <ProfileAction label={t('delete_account')} icon={Trash2} onClick={handleDelete} danger />
         </ProfileSection>
       </section>
 
@@ -800,16 +913,16 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
       )}
 
       {modal === 'language' && (
-        <ProfileModal title="Language" onClose={() => setModal(null)}>
+        <ProfileModal title={t('language')} onClose={() => setModal(null)}>
           <div className="profile-language-list">
-            {['English', 'Hindi', 'Spanish'].map((option) => (
+            {profileLanguages.map((option) => (
               <button
-                key={option}
-                className={language === option ? 'is-selected' : ''}
+                key={option.code}
+                className={language === option.code ? 'is-selected' : ''}
                 type="button"
-                onClick={() => handleLanguageChange(option)}
+                onClick={() => handleLanguageChange(option.code)}
               >
-                {option}
+                {option.label}
               </button>
             ))}
           </div>

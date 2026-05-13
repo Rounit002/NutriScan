@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Activity, 
-  User, 
-  ChevronRight, 
-  ChevronLeft, 
-  Check, 
-  Sparkles, 
-  ShieldCheck, 
-  ArrowLeft, 
+import {
+  Activity,
+  User,
+  ChevronRight,
+  ChevronLeft,
+  Check,
+  Sparkles,
+  ShieldCheck,
+  ArrowLeft,
   AlertCircle,
   Calendar,
   Scale,
@@ -18,7 +18,7 @@ import { MedicalProfilePage, HealthGoalsPage } from './Profile';
 export default function Onboarding({ onComplete, initialProfile, userAuth, authToken, onBack }) {
   const [step, setStep] = useState(1);
   const [error, setError] = useState('');
-  
+
   // Initialize profile state from initialProfile or defaults
   const [profile, setProfile] = useState(() => ({
     age: initialProfile?.age || '',
@@ -122,9 +122,9 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
     <div className="onboarding-flow min-h-screen" style={{ background: 'var(--ns-surface)', color: 'var(--ns-on-surface)', fontFamily: 'var(--font-main)' }}>
       {/* Background Decor */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] right-[-20%] w-[500px] h-[500px] rounded-full blur-[120px]" 
-          style={{ background: 'radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 70%)' }} />
-        <div className="absolute bottom-[-10%] left-[-20%] w-[500px] h-[500px] rounded-full blur-[120px]" 
+        <div className="absolute top-[-10%] right-[-20%] w-[500px] h-[500px] rounded-full blur-[120px]"
+          style={{ background: 'radial-gradient(circle, rgba(75, 111, 68, 0.1) 0%, transparent 70%)' }} />
+        <div className="absolute bottom-[-10%] left-[-20%] w-[500px] h-[500px] rounded-full blur-[120px]"
           style={{ background: 'radial-gradient(circle, rgba(253, 118, 26, 0.08) 0%, transparent 70%)' }} />
       </div>
 
@@ -137,15 +137,15 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
             </button>
             <div className="flex items-center gap-2">
               {[1, 2, 3].map(i => (
-                <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${step === i ? 'w-8 bg-[#10B981]' : 'w-2 bg-[#bbcabf]'}`} />
+                <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${step === i ? 'w-8 bg-[#4B6F44]' : 'w-2 bg-[#DDD9CF]'}`} />
               ))}
             </div>
             <div className="w-10" />
           </div>
 
           <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-14 h-14 bg-[#10B981]/10 rounded-2xl border border-[#10B981]/20 mb-4">
-              <Sparkles size={28} className="text-[#10B981]" />
+            <div className="inline-flex items-center justify-center w-14 h-14 bg-[#4B6F44]/10 rounded-2xl border border-[#4B6F44]/20 mb-4">
+              <Sparkles size={28} className="text-[#4B6F44]" />
             </div>
             <h1 className="text-3xl font-black tracking-tight mb-2" style={{ color: 'var(--ns-on-surface)' }}>Personalize Your Journey</h1>
             <p className="text-var(--ns-on-surface-var) text-sm font-bold opacity-80">We'll use these to tailor your nutritional analysis.</p>
@@ -153,16 +153,16 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
 
           <form onSubmit={handleBasicsSubmit} className="flex-1 flex flex-col gap-6">
             <div className="ns-card !p-6 border-var(--ns-outline-var) bg-white space-y-5 shadow-lg">
-              
+
               {/* Age & Gender Row */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label style={labelStyle}>Age</label>
                   <div className="relative">
-                    <Activity size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#10B981] opacity-70" />
-                    <input 
-                      type="number" 
-                      placeholder="24" 
+                    <Activity size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#4B6F44] opacity-70" />
+                    <input
+                      type="number"
+                      placeholder="24"
                       value={profile.age}
                       onChange={e => updateProfile({ age: e.target.value })}
                       style={inputStyle}
@@ -172,8 +172,8 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
                 <div>
                   <label style={labelStyle}>Gender</label>
                   <div className="relative">
-                    <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#10B981] opacity-70" />
-                    <select 
+                    <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#4B6F44] opacity-70" />
+                    <select
                       value={profile.gender}
                       onChange={e => updateProfile({ gender: e.target.value })}
                       style={{ ...inputStyle, appearance: 'none' }}
@@ -193,10 +193,10 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
                 <div>
                   <label style={labelStyle}>Height (cm)</label>
                   <div className="relative">
-                    <Ruler size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#10B981] opacity-70" />
-                    <input 
-                      type="number" 
-                      placeholder="175" 
+                    <Ruler size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#4B6F44] opacity-70" />
+                    <input
+                      type="number"
+                      placeholder="175"
                       value={profile.height}
                       onChange={e => updateProfile({ height: e.target.value })}
                       style={inputStyle}
@@ -206,10 +206,10 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
                 <div>
                   <label style={labelStyle}>Weight (kg)</label>
                   <div className="relative">
-                    <Scale size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#fd761a] opacity-70" />
-                    <input 
-                      type="number" 
-                      placeholder="70" 
+                    <Scale size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#C9A84C] opacity-70" />
+                    <input
+                      type="number"
+                      placeholder="70"
                       value={profile.weight}
                       onChange={e => updateProfile({ weight: e.target.value })}
                       style={inputStyle}
@@ -222,9 +222,9 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
               <div>
                 <label style={labelStyle}>Date of Birth</label>
                 <div className="relative">
-                  <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#23acf1] opacity-70" />
-                  <input 
-                    type="date" 
+                  <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#4A7B8A] opacity-70" />
+                  <input
+                    type="date"
                     value={profile.dateOfBirth}
                     onChange={e => updateProfile({ dateOfBirth: e.target.value })}
                     style={inputStyle}
@@ -241,16 +241,16 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
             </div>
 
             <div className="mt-auto pt-6">
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 className="w-full btn-primary !h-16 text-lg rounded-2xl shadow-xl hover:scale-[1.01] active:scale-[0.98]"
-                style={{ background: 'linear-gradient(135deg, #006c49 0%, #10B981 100%)', border: 'none', color: 'white' }}
+                style={{ background: 'linear-gradient(135deg, #4B6F44 0%, #4B6F44 100%)', border: 'none', color: 'white' }}
               >
                 Continue <ChevronRight size={20} />
               </button>
-              
+
               <div className="flex items-center justify-center gap-3 mt-6 opacity-70">
-                <ShieldCheck size={16} className="text-[#10B981]" />
+                <ShieldCheck size={16} className="text-[#4B6F44]" />
                 <p className="text-[10px] font-black uppercase tracking-widest text-var(--ns-on-surface)">Secure & Confidential</p>
               </div>
             </div>
@@ -259,7 +259,7 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
       )}
 
       {step === 2 && (
-        <MedicalProfilePage 
+        <MedicalProfilePage
           userProfile={profile}
           authToken={authToken}
           isOnboarding={true}
@@ -269,7 +269,7 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
       )}
 
       {step === 3 && (
-        <HealthGoalsPage 
+        <HealthGoalsPage
           userProfile={profile}
           authToken={authToken}
           isOnboarding={true}
@@ -278,7 +278,8 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
         />
       )}
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .medical-profile-page, .health-goals-page {
           background: var(--ns-surface) !important;
           color: var(--ns-on-surface) !important;
@@ -310,15 +311,15 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
           box-shadow: 0 4px 12px rgba(11, 28, 48, 0.04) !important;
         }
         .medical-issue-item.is-selected, .health-goals-list button.is-selected {
-          border-color: #10B981 !important;
-          background: rgba(16, 185, 129, 0.08) !important;
-          color: #006c49 !important;
+          border-color: #4B6F44 !important;
+          background: rgba(75, 111, 68, 0.08) !important;
+          color: #4B6F44 !important;
         }
         .medical-save-button, .health-goals-save-button {
           height: 64px !important;
           border-radius: 16px !important;
-          background: linear-gradient(135deg, #006c49 0%, #10B981 100%) !important;
-          box-shadow: 0 12px 30px rgba(16, 185, 129, 0.25) !important;
+          background: linear-gradient(135deg, #4B6F44 0%, #4B6F44 100%) !important;
+          box-shadow: 0 12px 30px rgba(75, 111, 68, 0.25) !important;
           font-size: 1.1rem !important;
           font-weight: 900 !important;
           text-transform: none !important;
@@ -335,9 +336,9 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
           font-weight: 900 !important;
         }
         .medical-selected-strip button, .health-goals-selected-strip button {
-          background: rgba(16, 185, 129, 0.12) !important;
-          color: #006c49 !important;
-          border: 1px solid rgba(16, 185, 129, 0.3) !important;
+          background: rgba(75, 111, 68, 0.12) !important;
+          color: #4B6F44 !important;
+          border: 1px solid rgba(75, 111, 68, 0.3) !important;
           font-weight: 800 !important;
         }
         .medical-issue-item button span, .health-goals-list button span {
@@ -345,7 +346,7 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
            color: var(--ns-on-surface) !important;
         }
         .medical-issue-item button strong, .health-goals-list button strong {
-           color: #10B981 !important;
+           color: #4B6F44 !important;
            font-weight: 900 !important;
         }
         .personal-detail-row label {

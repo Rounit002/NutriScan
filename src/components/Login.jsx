@@ -51,7 +51,7 @@ export default function Login({ onLogin, onNavigateSignup }) {
   const inputStyle = (field) => ({
     background: focusedField === field ? '#ffffff' : 'var(--ns-surface-low)',
     borderColor: focusedField === field ? 'var(--ns-primary-con)' : 'var(--ns-outline-var)',
-    boxShadow: focusedField === field ? '0 0 0 4px rgba(16,185,129,0.12)' : 'none',
+    boxShadow: focusedField === field ? '0 0 0 4px rgba(75, 111, 68,0.12)' : 'none',
     color: 'var(--ns-on-surface)',
     borderWidth: '1.5px',
     borderStyle: 'solid',
@@ -70,7 +70,7 @@ export default function Login({ onLogin, onNavigateSignup }) {
 
       {/* Background decoration */}
       <div className="fixed top-0 right-0 w-80 h-80 rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.08) 0%, transparent 70%)' }} />
+        style={{ background: 'radial-gradient(circle, rgba(75, 111, 68,0.08) 0%, transparent 70%)' }} />
       <div className="fixed bottom-0 left-0 w-64 h-64 rounded-full pointer-events-none"
         style={{ background: 'radial-gradient(circle, rgba(35,172,241,0.07) 0%, transparent 70%)' }} />
 
@@ -79,7 +79,7 @@ export default function Login({ onLogin, onNavigateSignup }) {
         {/* Logo + Brand */}
         <div className="flex flex-col items-center mb-10">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-            style={{ background: 'linear-gradient(135deg, #006c49, #10B981)', boxShadow: '0 8px 24px rgba(0,108,73,0.3)' }}>
+            style={{ background: 'linear-gradient(135deg, #4B6F44, #4B6F44)', boxShadow: '0 8px 24px rgba(75, 111, 68,0.3)' }}>
             <Leaf size={30} color="white" />
           </div>
           <h1 className="text-3xl font-bold text-center" style={{ fontFamily: 'var(--font-headline)', color: 'var(--ns-on-surface)', letterSpacing: '-0.02em' }}>

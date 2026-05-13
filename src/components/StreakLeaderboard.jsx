@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Flame, Medal, RefreshCw, Trophy, User } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const rankLabels = ['1', '2', '3'];
 
@@ -40,6 +41,7 @@ export default function StreakLeaderboard({ authToken, userAuth, onBack }) {
   const [leaderboard, setLeaderboard] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     let isMounted = true;
@@ -47,7 +49,7 @@ export default function StreakLeaderboard({ authToken, userAuth, onBack }) {
     const loadStreakPage = async () => {
       if (!authToken) {
         setIsLoading(false);
-        setError('Sign in again to view streak details.');
+        setError(t('sign_in_streak'));
         return;
       }
 
@@ -80,7 +82,7 @@ export default function StreakLeaderboard({ authToken, userAuth, onBack }) {
         }
       } catch (loadError) {
         console.error(loadError);
-        if (isMounted) setError('Could not load the leaderboard right now.');
+        if (isMounted) setError(t('could_not_load'));
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -115,20 +117,20 @@ export default function StreakLeaderboard({ authToken, userAuth, onBack }) {
           </button>
           <div>
             <span>FitScan</span>
-            <strong>Streak Board</strong>
+            <strong>{t('streak_board')}</strong>
           </div>
         </header>
 
         <section className="streak-stats-grid" aria-label="Your streak and points">
-          <StatTile icon={Flame} label="Streak" value={`${streakInfo.streak}d`} tone="fire" />
-          <StatTile icon={Trophy} label="Points" value={`${streakInfo.points}+`} tone="points" />
+          <StatTile icon={Flame} label={t('streak')} value={`${streakInfo.streak}d`} tone="fire" />
+          <StatTile icon={Trophy} label={t('points')} value={`${streakInfo.points}+`} tone="points" />
         </section>
 
         <section className="leaderboard-card" aria-label="Leaderboard">
           <div className="leaderboard-card-title">
             <div>
-              <span>Leaderboard</span>
-              <strong>Top FitScan users</strong>
+              <span>{t('leaderboard')}</span>
+              <strong>{t('top_users')}</strong>
             </div>
             {isLoading && <RefreshCw className="leaderboard-loading-icon" size={18} />}
           </div>

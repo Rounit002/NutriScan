@@ -37,6 +37,43 @@ const formatNutriments = (nutriments) => {
     .join(', ') || 'Not listed';
 };
 
+const normalizeNutrition = (nutrition) => {
+  if (!nutrition || typeof nutrition !== 'object') return null;
+  const servingSize = nutrition.serving_size || nutrition.servingSize || nutrition.serving || null;
+  const servingQuantity = nutrition.serving_quantity || nutrition.servingQuantity || null;
+  const nutriments = nutrition.nutriments && typeof nutrition.nutriments === 'object'
+    ? { ...nutrition.nutriments }
+    : { ...nutrition };
+
+  delete nutriments.nutriments;
+  delete nutriments.servingSize;
+  delete nutriments.serving;
+
+  const normalized = {};
+  const setNumber = (key, ...values) => {
+    for (const value of values) {
+      if (value === undefined || value === null || value === '') continue;
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        normalized[key] = parsed;
+        return;
+      }
+    }
+  };
+
+  setNumber('energy-kcal_serving', nutriments['energy-kcal_serving'], nutriments.energy_kcal_serving, nutriments.calories_serving, nutriments.calories);
+  setNumber('proteins_serving', nutriments.proteins_serving, nutriments.protein_serving, nutriments.protein, nutriments.proteins);
+  setNumber('carbohydrates_serving', nutriments.carbohydrates_serving, nutriments.carbs_serving, nutriments.carbs, nutriments.carbohydrates);
+  setNumber('fat_serving', nutriments.fat_serving, nutriments.fats_serving, nutriments.fat, nutriments.fats);
+  setNumber('sodium_mg_serving', nutriments.sodium_mg_serving, nutriments.sodiumMgServing, nutriments.sodium_mg);
+  setNumber('sodium_serving', nutriments.sodium_serving, nutriments.sodium);
+  setNumber('salt_serving', nutriments.salt_serving, nutriments.salt);
+  setNumber('serving_quantity', servingQuantity, nutriments.serving_quantity);
+
+  if (servingSize) normalized.serving_size = String(servingSize);
+  return Object.keys(normalized).length ? normalized : null;
+};
+
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Ordered by remaining free-tier quota: untouched models first, then partially used
@@ -203,6 +240,12 @@ function normalizeResult(result) {
   // Clean up the explanation field (no longer needed for display but keep for sharing)
   delete result.explanation;
 
+  const normalizedNutrition = normalizeNutrition(result.nutrition || result.nutriments);
+  if (normalizedNutrition) {
+    result.nutrition = normalizedNutrition;
+    result.nutriments = normalizedNutrition;
+  }
+
   return result;
 }
 
@@ -225,6 +268,7 @@ Analyze this packaged food product image for a user with:
 - Conditions: ${formatUserConditions(userProfile?.conditions)}
 
 Identify the product brand and name. Analyze ingredients against the user's profile. Score 1-10.
+Also read the nutrition facts panel from the image. Return nutrition values for ONE SERVING whenever visible. If only per-100g values are visible, include serving_size/serving_quantity if visible so the app can calculate one serving. Use numbers only for nutrient values.
 
 CRITICAL: "verdict" must be an array of 3-5 ultra-short labels. Each label starts with "Good:" or "Bad:" followed by MAX 5 words. No full sentences. No explanations. Just the point.
 Examples:
@@ -241,6 +285,14 @@ Respond ONLY with valid JSON, no markdown:
   "brand": "Brand",
   "productName": "Product",
   "score": 7,
+  "nutrition": {
+    "serving_size": "30g",
+    "energy-kcal_serving": 120,
+    "proteins_serving": 3,
+    "carbohydrates_serving": 18,
+    "fat_serving": 4,
+    "sodium_mg_serving": 140
+  },
   "verdict": ["Good: High protein", "Bad: Harmful for diabetes", "Bad: Contains Sucralose"],
   "sideEffects": ["May spike blood sugar", "Can cause bloating due to artificial sweeteners"],
   "ingredientsAnalysis": [

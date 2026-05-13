@@ -1,15 +1,46 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, ThumbsUp, ThumbsDown, MessageSquarePlus, Clock, User } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import {
+  ArrowLeft,
+  ChevronUp,
+  Plus,
+  Search,
+  Filter,
+  Clock,
+  User,
+  Tag,
+  CheckCircle2,
+  Circle,
+  Loader2,
+  X,
+  MessageSquarePlus,
+  ArrowUpDown
+} from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
+const CATEGORIES = ['Feature', 'UI', 'Performance', 'Bug', 'Other'];
+const STATUSES = {
+  'Under Review': { color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
+  'Planned': { color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
+  'In Progress': { color: '#8b5cf6', bg: 'rgba(139, 92, 246, 0.1)' },
+  'Completed': { color: '#4B6F44', bg: 'rgba(75, 111, 68, 0.1)' }
+};
 
 export default function FeatureRequests({ userAuth, authToken, onBack }) {
   const [features, setFeatures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   const [showNewForm, setShowNewForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState('All');
+  const [sortBy, setSortBy] = useState('Most Votes'); // 'Most Votes', 'Newest', 'Oldest'
+
+  // New form state
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
+  const [newCategory, setNewCategory] = useState('Feature');
   const [submitting, setSubmitting] = useState(false);
+  const { t } = useTranslation();
 
   useEffect(() => {
     fetchFeatures();
@@ -19,9 +50,7 @@ export default function FeatureRequests({ userAuth, authToken, onBack }) {
     setLoading(true);
     try {
       const response = await fetch('http://localhost:5000/features', {
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        }
+        headers: { 'Authorization': `Bearer ${authToken}` }
       });
       if (!response.ok) throw new Error('Failed to fetch features');
       const data = await response.json();
@@ -34,22 +63,20 @@ export default function FeatureRequests({ userAuth, authToken, onBack }) {
     }
   };
 
-  const handleVote = async (featureId, currentVote, type) => {
-    // If clicking the same vote type, we might want to remove the vote.
-    const newVote = currentVote === type ? 'none' : type;
-    
+  const handleVote = async (featureId, currentVote) => {
+    const newVote = currentVote === 'up' ? 'none' : 'up';
+
     // Optimistic update
     setFeatures(currents => currents.map(f => {
       if (f.id === featureId) {
-        const updated = { ...f, voters: { ...f.voters, [userAuth.id]: newVote } };
-        // Recalculate upvotes/downvotes
+        const updatedVoters = { ...f.voters };
+        if (newVote === 'none') delete updatedVoters[userAuth.id];
+        else updatedVoters[userAuth.id] = 'up';
+
         let upvotes = 0;
-        let downvotes = 0;
-        for (const uid in updated.voters) {
-          if (updated.voters[uid] === 'up') upvotes++;
-          if (updated.voters[uid] === 'down') downvotes++;
-        }
-        return { ...updated, upvotes, downvotes };
+        for (const uid in updatedVoters) if (updatedVoters[uid] === 'up') upvotes++;
+
+        return { ...f, voters: updatedVoters, upvotes };
       }
       return f;
     }));
@@ -65,15 +92,14 @@ export default function FeatureRequests({ userAuth, authToken, onBack }) {
       });
     } catch (err) {
       console.error('Failed to vote:', err);
-      // Rollback on failure could be implemented here
-      fetchFeatures(); 
+      fetchFeatures();
     }
   };
 
   const handleSubmitNew = async (e) => {
     e.preventDefault();
     if (!newTitle.trim() || !newDescription.trim()) return;
-    
+
     setSubmitting(true);
     try {
       const response = await fetch('http://localhost:5000/features', {
@@ -84,16 +110,15 @@ export default function FeatureRequests({ userAuth, authToken, onBack }) {
         },
         body: JSON.stringify({
           title: newTitle,
-          description: newDescription
+          description: newDescription,
+          category: newCategory
         })
       });
-      
+
       if (!response.ok) throw new Error('Failed to create feature');
-      
-      setNewTitle('');
-      setNewDescription('');
-      setShowNewForm(false);
-      fetchFeatures(); // Reload list
+
+      resetForm();
+      fetchFeatures();
     } catch (err) {
       console.error('Error submitting feature:', err);
       setError('Could not submit feature request.');
@@ -102,161 +127,238 @@ export default function FeatureRequests({ userAuth, authToken, onBack }) {
     }
   };
 
-  // Utility to format date relatively
+  const resetForm = () => {
+    setNewTitle('');
+    setNewDescription('');
+    setNewCategory('Feature');
+    setShowNewForm(false);
+  };
+
   const timeAgo = (dateStr) => {
     const d = new Date(dateStr);
     const now = new Date();
     const diffInSeconds = Math.floor((now - d) / 1000);
-    
     if (diffInSeconds < 60) return 'Just now';
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
     return `${Math.floor(diffInSeconds / 86400)}d ago`;
   };
 
-  return (
-    <div className="profile-page">
-      <section className="profile-phone-shell" aria-label="Feature Requests">
-        <header className="profile-topbar">
-          <button type="button" onClick={onBack} aria-label="Back">
-            <ArrowLeft size={20} />
-          </button>
-          <h1>Feature Requests</h1>
-          <span />
-        </header>
+  const filteredFeatures = useMemo(() => {
+    let result = [...features];
 
-        {showNewForm ? (
-          <section className="p-4 flex flex-col gap-4 flex-1 overflow-y-auto">
-            <div className="bg-[var(--ns-surface)] p-6 rounded-[24px] shadow-sm flex flex-col gap-4">
-              <h2 className="text-lg font-bold" style={{ color: 'var(--ns-text-high)' }}>Suggest a Feature</h2>
-              <form onSubmit={handleSubmitNew} className="flex flex-col gap-4">
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium" style={{ color: 'var(--ns-text-medium)' }}>Title</label>
-                  <input 
-                    type="text" 
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                    placeholder="e.g. Add dark mode"
-                    required
-                    className="w-full bg-[var(--ns-bg)] border border-[var(--ns-outline-dim)] rounded-xl px-4 py-3 text-[var(--ns-text-high)] focus:outline-none focus:border-[var(--ns-primary)] transition-colors"
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium" style={{ color: 'var(--ns-text-medium)' }}>Description</label>
-                  <textarea 
-                    value={newDescription}
-                    onChange={(e) => setNewDescription(e.target.value)}
-                    placeholder="Explain what the feature does and why it would be useful..."
-                    required
-                    rows={4}
-                    className="w-full bg-[var(--ns-bg)] border border-[var(--ns-outline-dim)] rounded-xl px-4 py-3 text-[var(--ns-text-high)] focus:outline-none focus:border-[var(--ns-primary)] transition-colors resize-none"
-                  />
-                </div>
-                <div className="flex gap-3 mt-2">
-                  <button 
-                    type="button" 
-                    onClick={() => setShowNewForm(false)}
-                    className="flex-1 py-3 px-4 rounded-xl font-bold bg-[var(--ns-surface-high)] text-[var(--ns-text-medium)] hover:bg-[var(--ns-outline-dim)] transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="submit" 
-                    disabled={submitting || !newTitle.trim() || !newDescription.trim()}
-                    className="flex-1 py-3 px-4 rounded-xl font-bold text-white transition-opacity disabled:opacity-50"
-                    style={{ background: 'var(--ns-primary)' }}
-                  >
-                    {submitting ? 'Submitting...' : 'Post Request'}
-                  </button>
-                </div>
-              </form>
+    // Search
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(f =>
+        f.title.toLowerCase().includes(q) ||
+        f.description.toLowerCase().includes(q)
+      );
+    }
+
+    // Filter Tabs
+    if (activeFilter === 'Planned') result = result.filter(f => f.status === 'Planned');
+    else if (activeFilter === 'Completed') result = result.filter(f => f.status === 'Completed');
+    else if (activeFilter === 'Top Voted') result.sort((a, b) => (b.upvotes - b.downvotes) - (a.upvotes - a.downvotes));
+    else if (activeFilter === 'New') result.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    // Secondary Sort
+    if (sortBy === 'Most Votes') {
+      result.sort((a, b) => (b.upvotes - b.downvotes) - (a.upvotes - a.downvotes));
+    } else if (sortBy === 'Newest') {
+      result.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    } else if (sortBy === 'Oldest') {
+      result.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    }
+
+    return result;
+  }, [features, searchQuery, activeFilter, sortBy]);
+
+  return (
+    <div className="feature-requests-page">
+      <header className="fr-header">
+        <div className="fr-header-top">
+          <button onClick={onBack} className="fr-back-btn">
+            <ArrowLeft size={22} />
+          </button>
+          <h1>{t('feature_requests')}</h1>
+          <button onClick={() => setShowNewForm(true)} className="fr-new-btn">
+            <Plus size={20} />
+            <span>{t('new')}</span>
+          </button>
+        </div>
+
+        <div className="fr-header-search">
+          <div className="search-pill">
+            <Search size={18} />
+            <input
+              type="text"
+              placeholder={t('search_ideas')}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && <X size={16} onClick={() => setSearchQuery('')} />}
+          </div>
+        </div>
+
+        <div className="fr-filter-tabs">
+          {['All', 'Top Voted', 'New', 'Planned', 'Completed'].map(tab => (
+            <button
+              key={tab}
+              className={activeFilter === tab ? 'active' : ''}
+              onClick={() => setActiveFilter(tab)}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <main className="fr-content">
+        <div className="fr-toolbar">
+          <span className="fr-count">{t('requests_count', { count: filteredFeatures.length })}</span>
+          <div className="fr-sort">
+            <ArrowUpDown size={14} />
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+              <option>Most Votes</option>
+              <option>Newest</option>
+              <option>Oldest</option>
+            </select>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="fr-loading">
+            <Loader2 className="animate-spin" size={32} />
+            <p>{t('loading_requests')}</p>
+          </div>
+        ) : error ? (
+          <div className="fr-error">{error}</div>
+        ) : filteredFeatures.length === 0 ? (
+          <div className="fr-empty">
+            <div className="fr-empty-icon">
+              <MessageSquarePlus size={64} />
             </div>
-          </section>
+            <h3>{t('no_requests')}</h3>
+            <p>{t('no_requests_desc')}</p>
+            <button onClick={() => setShowNewForm(true)} className="fr-empty-btn">{t('suggest_feature')}</button>
+          </div>
         ) : (
-          <>
-            <div className="p-4 pb-0 flex justify-between items-center">
-              <p className="text-sm font-medium" style={{ color: 'var(--ns-text-medium)' }}>
-                Vote on ideas or suggest your own
-              </p>
-              <button 
-                onClick={() => setShowNewForm(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-[var(--ns-primary)] text-white rounded-lg text-sm font-bold shadow-sm hover:opacity-90 transition-opacity"
-              >
-                <MessageSquarePlus size={16} />
-                <span>New</span>
+          <div className="fr-list">
+            {filteredFeatures.map(feature => {
+              const myVote = feature.voters && userAuth ? feature.voters[userAuth.id] : null;
+              const status = STATUSES[feature.status] || STATUSES['Under Review'];
+
+              return (
+                <div key={feature.id} className="fr-card">
+                  <div className="fr-card-vote">
+                    <button
+                      onClick={() => handleVote(feature.id, myVote)}
+                      className={`vote-btn ${myVote === 'up' ? 'active' : ''}`}
+                    >
+                      <ChevronUp size={24} />
+                      <span>{feature.upvotes - (feature.downvotes || 0)}</span>
+                    </button>
+                  </div>
+
+                  <div className="fr-card-body">
+                    <div className="fr-card-header">
+                      <div className="fr-badges">
+                        <span className="badge-status" style={{ background: status.bg, color: status.color }}>
+                          {feature.status || 'Under Review'}
+                        </span>
+                        <span className="badge-category">
+                          <Tag size={10} />
+                          {feature.category || 'Feature'}
+                        </span>
+                      </div>
+                      <h3>{feature.title}</h3>
+                    </div>
+
+                    <p className="fr-card-desc">{feature.description}</p>
+
+                    <div className="fr-card-footer">
+                      <div className="fr-user">
+                        <User size={12} />
+                        <span>{feature.author_name || 'Anonymous'}</span>
+                      </div>
+                      <div className="fr-dot" />
+                      <div className="fr-time">
+                        <Clock size={12} />
+                        <span>{timeAgo(feature.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </main>
+
+      {/* New Feature Modal / Bottom Sheet */}
+      {showNewForm && (
+        <div className="fr-modal-overlay" onClick={resetForm}>
+          <div className="fr-bottom-sheet" onClick={e => e.stopPropagation()}>
+            <div className="sheet-handle" onClick={resetForm} />
+            <div className="sheet-header">
+              <h2>{t('suggest_a_feature')}</h2>
+              <button onClick={resetForm} className="sheet-close">
+                <X size={20} />
               </button>
             </div>
 
-            <section className="p-4 flex flex-col gap-4 flex-1 overflow-y-auto">
-              {loading ? (
-                <div className="flex justify-center p-8">
-                  <div className="w-8 h-8 rounded-full border-[3px] border-[var(--ns-surface-high)] border-t-[var(--ns-primary)] animate-spin"></div>
+            <form onSubmit={handleSubmitNew} className="sheet-form">
+              <div className="form-group">
+                <label>{t('title')}</label>
+                <input
+                  type="text"
+                  value={newTitle}
+                  onChange={e => setNewTitle(e.target.value)}
+                  placeholder={t('what_should_add')}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <label>{t('category')}</label>
+                <div className="category-chips">
+                  {CATEGORIES.map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      className={newCategory === cat ? 'active' : ''}
+                      onClick={() => setNewCategory(cat)}
+                    >
+                      {cat}
+                    </button>
+                  ))}
                 </div>
-              ) : error ? (
-                <div className="bg-red-500/10 text-red-500 p-4 rounded-2xl text-center text-sm font-bold">
-                  {error}
-                </div>
-              ) : features.length === 0 ? (
-                <div className="text-center p-8 flex flex-col items-center gap-3 text-[var(--ns-text-medium)]">
-                  <MessageSquarePlus size={48} opacity={0.3} />
-                  <p>No feature requests yet.<br/>Be the first to suggest one!</p>
-                </div>
-              ) : (
-                features.map(feature => {
-                  const myVote = feature.voters && userAuth ? feature.voters[userAuth.id] : null;
-                  
-                  return (
-                    <div key={feature.id} className="bg-[var(--ns-surface)] p-5 rounded-[24px] shadow-sm flex gap-4">
-                      {/* Voting Column */}
-                      <div className="flex flex-col items-center gap-2">
-                        <button 
-                          onClick={() => handleVote(feature.id, myVote, 'up')}
-                          className={`p-2 rounded-full transition-colors ${myVote === 'up' ? 'bg-[var(--ns-primary)] text-white' : 'bg-[var(--ns-bg)] text-[var(--ns-text-medium)] hover:bg-[var(--ns-surface-high)]'}`}
-                          aria-label="Upvote"
-                        >
-                          <ThumbsUp size={18} className={myVote === 'up' ? 'fill-current' : ''} />
-                        </button>
-                        <span className="font-black text-lg w-8 text-center" style={{ color: 'var(--ns-text-high)' }}>
-                          {feature.upvotes - feature.downvotes}
-                        </span>
-                        <button 
-                          onClick={() => handleVote(feature.id, myVote, 'down')}
-                          className={`p-2 rounded-full transition-colors ${myVote === 'down' ? 'bg-red-500 text-white' : 'bg-[var(--ns-bg)] text-[var(--ns-text-medium)] hover:bg-[var(--ns-surface-high)]'}`}
-                          aria-label="Downvote"
-                        >
-                          <ThumbsDown size={18} className={myVote === 'down' ? 'fill-current' : ''} />
-                        </button>
-                      </div>
-                      
-                      {/* Content Column */}
-                      <div className="flex-1 flex flex-col min-w-0">
-                        <h3 className="font-bold text-lg mb-1 truncate" style={{ color: 'var(--ns-text-high)' }}>
-                          {feature.title}
-                        </h3>
-                        <p className="text-sm mb-3 leading-relaxed" style={{ color: 'var(--ns-text-medium)' }}>
-                          {feature.description}
-                        </p>
-                        
-                        <div className="flex items-center gap-3 mt-auto pt-3 border-t border-[var(--ns-outline-dim)] text-xs font-medium" style={{ color: 'var(--ns-text-medium)' }}>
-                          <div className="flex items-center gap-1.5">
-                            <User size={14} />
-                            <span className="truncate max-w-[100px]">{feature.author_name || 'Anonymous'}</span>
-                          </div>
-                          <div className="w-1 h-1 rounded-full bg-[var(--ns-outline)]"></div>
-                          <div className="flex items-center gap-1.5">
-                            <Clock size={14} />
-                            <span>{timeAgo(feature.created_at)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </section>
-          </>
-        )}
-      </section>
+              </div>
+
+              <div className="form-group">
+                <label>{t('description')}</label>
+                <textarea
+                  value={newDescription}
+                  onChange={e => setNewDescription(e.target.value)}
+                  placeholder={t('describe_feature')}
+                  required
+                  rows={4}
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="submit-btn"
+                disabled={submitting || !newTitle.trim() || !newDescription.trim()}
+              >
+                {submitting ? <Loader2 className="animate-spin" size={20} /> : t('post_request')}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

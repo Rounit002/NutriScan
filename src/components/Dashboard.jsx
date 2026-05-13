@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Activity,
   Apple,
@@ -9,7 +10,6 @@ import {
   ChevronRight,
   Flame,
   Home as HomeIcon,
-  LogOut,
   Search,
   Scale,
   Info,
@@ -17,12 +17,13 @@ import {
   Utensils,
 } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
+import { getServingNutrition } from '../utils/nutrition';
 
 function ScoreDial({ score }) {
   const normalized = Math.max(0, Math.min(score, 10));
   const circumference = 2 * Math.PI * 42;
   const dash = (normalized / 10) * circumference;
-  const color = normalized >= 8 ? '#10b981' : normalized >= 5 ? '#f59e0b' : '#ef4444';
+  const color = normalized >= 8 ? '#4B6F44' : normalized >= 5 ? '#f59e0b' : '#ef4444';
 
   return (
     <div className="fitscan-score-dial" aria-label={`Average score ${normalized} out of 10`}>
@@ -62,23 +63,25 @@ function MacroRow({ label, value, max, color }) {
 }
 
 function BottomNav({ onNavigate }) {
+  const { t } = useTranslation();
+
   return (
     <nav className="fitscan-home-nav" aria-label="Primary navigation">
       <button className="is-active" type="button" aria-label="Home">
         <HomeIcon size={18} />
-        <span>Home</span>
+        <span>{t('home')}</span>
       </button>
       <button type="button" onClick={() => onNavigate('home')} aria-label="Scan product">
         <Camera size={18} />
-        <span>Scan</span>
+        <span>{t('scan')}</span>
       </button>
       <button type="button" onClick={() => onNavigate('compare')} aria-label="Comparison">
         <BarChart2 size={18} />
-        <span>Compare</span>
+        <span>{t('compare')}</span>
       </button>
       <button type="button" onClick={() => onNavigate('profile')} aria-label="Profile">
         <User size={18} />
-        <span>Profile</span>
+        <span>{t('profile')}</span>
       </button>
     </nav>
   );
@@ -115,6 +118,143 @@ const addDays = (date, days) => {
 const monthKeyToDate = (monthKey) => {
   const [year, month] = monthKey.split('-').map(Number);
   return new Date(year, month - 1, 1);
+};
+
+const safeJsonValue = (value, fallback = null) => {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+};
+
+const numberOrNull = (value) => {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatNutrientValue = (value, decimals = 0) => {
+  const parsed = numberOrNull(value);
+  if (parsed === null) return '--';
+  return Number.isInteger(parsed) ? String(parsed) : parsed.toFixed(decimals);
+};
+
+const firstNumericValue = (...values) => {
+  for (const value of values) {
+    const parsed = numberOrNull(value);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
+const getScanNutriments = (scan) => {
+  const rawProductData = safeJsonValue(scan.raw_product_data, null) || safeJsonValue(scan.product_data, null);
+  const direct = safeJsonValue(scan.nutriments, null) || safeJsonValue(scan.nutrition, null);
+  return direct || rawProductData?.nutriments || rawProductData?.nutrition || rawProductData?.nutrientLevels || {};
+};
+
+const getScanProductData = (scan) => (
+  safeJsonValue(scan.raw_product_data, null) || safeJsonValue(scan.product_data, null) || {}
+);
+
+const parseServingGrams = (productData, nutriments) => {
+  const directServing = firstNumericValue(
+    productData?.serving_quantity,
+    nutriments?.serving_quantity,
+    nutriments?.serving_size
+  );
+  if (directServing !== null) return directServing;
+
+  const servingText = String(productData?.serving_size || nutriments?.serving_size || '');
+  const match = servingText.match(/(\d+(?:\.\d+)?)\s*(g|gram|grams|ml|millilitre|milliliter|millilitres|milliliters)\b/i);
+  return match ? Number(match[1]) : null;
+};
+
+const getServingAmount = ({ nutriments, servingKeys, per100Keys, servingGrams, multiplier = 1 }) => {
+  const servingValue = firstNumericValue(...servingKeys.map((key) => nutriments?.[key]));
+  if (servingValue !== null) return servingValue * multiplier;
+
+  const per100Value = firstNumericValue(...per100Keys.map((key) => nutriments?.[key]));
+  if (per100Value === null || servingGrams === null) return null;
+
+  return (per100Value * servingGrams * multiplier) / 100;
+};
+
+const getServingSodiumMg = (nutriments, servingGrams) => {
+  const sodiumMgServing = firstNumericValue(nutriments?.sodium_mg_serving, nutriments?.sodium_mg, nutriments?.sodium_mg_value);
+  if (sodiumMgServing !== null) return sodiumMgServing;
+
+  const sodiumServingGrams = firstNumericValue(nutriments?.sodium_serving, nutriments?.sodium_value);
+  if (sodiumServingGrams !== null) return sodiumServingGrams * 1000;
+
+  const sodiumMg100g = firstNumericValue(nutriments?.sodium_mg_100g);
+  if (sodiumMg100g !== null && servingGrams !== null) return (sodiumMg100g * servingGrams) / 100;
+
+  const sodium100gGrams = firstNumericValue(nutriments?.sodium_100g, nutriments?.sodium);
+  if (sodium100gGrams !== null && servingGrams !== null) return (sodium100gGrams * servingGrams * 1000) / 100;
+
+  const saltServingGrams = firstNumericValue(nutriments?.salt_serving);
+  if (saltServingGrams !== null) return saltServingGrams * 400;
+
+  const salt100gGrams = firstNumericValue(nutriments?.salt_100g, nutriments?.salt);
+  if (salt100gGrams !== null && servingGrams !== null) return (salt100gGrams * servingGrams * 400) / 100;
+
+  return null;
+};
+
+const getRecentNutrientChips = (scan, servings = 1) => {
+  const nutriments = getScanNutriments(scan);
+  const productData = getScanProductData(scan);
+  const servingGrams = parseServingGrams(productData, nutriments);
+  const sodiumMg = getServingSodiumMg(nutriments, servingGrams);
+  const multiplier = Number.isFinite(Number(servings)) ? Number(servings) : 1;
+
+  return [
+    {
+      icon: '🔥',
+      label: 'Calories',
+      value: `${formatNutrientValue((getServingAmount({
+        nutriments,
+        servingKeys: ['energy-kcal_serving', 'energy_kcal_serving', 'energy-kcal_value', 'energy_kcal_value', 'calories_serving', 'caloriesServing'],
+        per100Keys: ['energy-kcal_100g', 'energy-kcal', 'energy_kcal_100g', 'energy_kcal', 'calories'],
+        servingGrams,
+      }) ?? 0) * multiplier)} kcal`,
+    },
+    {
+      icon: '💪',
+      label: 'Protein',
+      value: `${formatNutrientValue(((getServingAmount({
+        nutriments,
+        servingKeys: ['proteins_serving', 'protein_serving', 'proteins_value', 'protein_value', 'proteinServing'],
+        per100Keys: ['proteins_100g', 'protein_100g', 'protein', 'proteins'],
+        servingGrams,
+      }) ?? 0) * multiplier), 1)}g`,
+    },
+    {
+      icon: '🌾',
+      label: 'Carbs',
+      value: `${formatNutrientValue(((getServingAmount({
+        nutriments,
+        servingKeys: ['carbohydrates_serving', 'carbs_serving', 'carbohydrates_value', 'carbs_value', 'carbohydratesServing', 'carbsServing'],
+        per100Keys: ['carbohydrates_100g', 'carbs_100g', 'carbs', 'carbohydrates'],
+        servingGrams,
+      }) ?? 0) * multiplier), 1)}g`,
+    },
+    { icon: '🧂', label: 'Sodium', value: `${formatNutrientValue((sodiumMg ?? 0) * multiplier)}mg` },
+    {
+      icon: '🫙',
+      label: 'Fats',
+      value: `${formatNutrientValue(((getServingAmount({
+        nutriments,
+        servingKeys: ['fat_serving', 'fats_serving', 'fat_value', 'fats_value', 'fatServing', 'fatsServing'],
+        per100Keys: ['fat_100g', 'fats_100g', 'fat', 'fats'],
+        servingGrams,
+      }) ?? 0) * multiplier), 1)}g`,
+    },
+  ];
 };
 
 function WeekSelector({
@@ -194,13 +334,14 @@ function WeekSelector({
 }
 
 function BMICard({ userProfile, onNavigate }) {
+  const { t } = useTranslation();
   const height = parseFloat(userProfile?.height); // in cm
   const weight = parseFloat(userProfile?.weight); // in kg
   const age = userProfile?.age;
   const gender = userProfile?.gender;
 
   const hasData = height > 0 && weight > 0;
-  
+
   let bmi = 0;
   let category = '';
   let color = '#94a3b8';
@@ -209,14 +350,14 @@ function BMICard({ userProfile, onNavigate }) {
   if (hasData) {
     const heightInMeters = height / 100;
     bmi = weight / (heightInMeters * heightInMeters);
-    
+
     if (bmi < 18.5) {
       category = 'Underweight';
       color = '#3b82f6'; // Blue
       position = Math.min(Math.max((bmi / 18.5) * 25, 5), 25);
     } else if (bmi < 25) {
       category = 'Normal';
-      color = '#10b981'; // Green
+      color = '#4B6F44'; // Green
       position = 25 + ((bmi - 18.5) / 6.5) * 25;
     } else if (bmi < 30) {
       category = 'Overweight';
@@ -233,8 +374,8 @@ function BMICard({ userProfile, onNavigate }) {
     <section className="fitscan-bmi-card">
       <div className="fitscan-section-heading">
         <div>
-          <span>Health Metrics</span>
-          <strong>Body Mass Index</strong>
+          <span>{t('health_metrics')}</span>
+          <strong>{t('body_mass_index')}</strong>
         </div>
         <Scale size={18} className="fitscan-bmi-icon" />
       </div>
@@ -272,8 +413,8 @@ function BMICard({ userProfile, onNavigate }) {
               <span className="segment-green" />
               <span className="segment-orange" />
               <span className="segment-red" />
-              <div 
-                className="fitscan-bmi-pointer" 
+              <div
+                className="fitscan-bmi-pointer"
                 style={{ left: `${position}%`, backgroundColor: color }}
               />
             </div>
@@ -289,12 +430,38 @@ function BMICard({ userProfile, onNavigate }) {
   );
 }
 
-export default function Dashboard({ userAuth, userProfile, authToken, onNavigate, onLogout, isDark, toggleTheme }) {
+export default function Dashboard({ userAuth, userProfile, authToken, onNavigate, onViewDetail, isDark, toggleTheme }) {
+  const { t } = useTranslation();
   const [history, setHistory] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [selectedMonth, setSelectedMonth] = useState(() => toMonthKey(new Date()));
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+
+  const handleScanClick = (scan) => {
+    const parseJson = (val, fallback) => {
+      if (!val) return fallback;
+      if (typeof val !== 'string') return val;
+      try { return JSON.parse(val); } catch { return fallback; }
+    };
+
+    onViewDetail?.({
+      scanId: scan.id,
+      servings: scan.servings || 1,
+      productName: scan.product_name || 'Product',
+      brand: scan.brand || 'Unknown Brand',
+      score: scan.score,
+      verdict: parseJson(scan.verdict, []),
+      ingredientsAnalysis: parseJson(scan.ingredients, []),
+      alternatives: parseJson(scan.alternatives, []),
+      sideEffects: parseJson(scan.side_effects, []),
+      image_url: scan.image_url,
+      barcode: scan.product_data?.barcode || scan.product_data?.code || '',
+      recorded_at: scan.created_at,
+      nutriments: scan.nutriments,
+      rawProductData: scan.raw_product_data || scan.product_data
+    });
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -381,10 +548,19 @@ export default function Dashboard({ userAuth, userProfile, authToken, onNavigate
     ? Math.round((selectedDayScans.reduce((sum, scan) => sum + Number(scan.score || 0), 0) / selectedDayScans.length) * 10) / 10
     : 0;
 
+  const dailyNutrition = selectedDayScans.reduce((totals, scan) => {
+    const nutrition = getServingNutrition(scan, scan.servings || 1);
+    return {
+      calories: totals.calories + (nutrition.calories || 0),
+      protein: totals.protein + (nutrition.protein || 0),
+      carbs: totals.carbs + (nutrition.carbs || 0),
+    };
+  }, { calories: 0, protein: 0, carbs: 0 });
+
   const macros = [
-    { label: 'Calories', value: Math.min(selectedDayScans.length * 260, 2100), max: 2100, color: '#10b981' },
-    { label: 'Protein', value: Math.min(selectedDayScans.length * 17, 140), max: 140, color: '#2563eb' },
-    { label: 'Carbs', value: Math.min(selectedDayScans.length * 31, 260), max: 260, color: '#f97316' },
+    { label: 'Calories', value: Math.round(dailyNutrition.calories), max: 2100, color: '#4B6F44' },
+    { label: 'Protein', value: Math.round(dailyNutrition.protein), max: 140, color: '#2563eb' },
+    { label: 'Carbs', value: Math.round(dailyNutrition.carbs), max: 260, color: '#f97316' },
   ];
 
   return (
@@ -398,6 +574,14 @@ export default function Dashboard({ userAuth, userProfile, authToken, onNavigate
           <div className="fitscan-top-actions">
             <ThemeToggle isDark={isDark} onToggle={toggleTheme} />
             <button
+              className="fitscan-icon-button"
+              type="button"
+              onClick={() => onNavigate('trends')}
+              aria-label="View health trends and graphs"
+            >
+              <Activity size={18} />
+            </button>
+            <button
               className="fitscan-streak-pill"
               type="button"
               onClick={() => onNavigate('streak')}
@@ -405,9 +589,6 @@ export default function Dashboard({ userAuth, userProfile, authToken, onNavigate
             >
               <Flame size={16} />
               <span>{userAuth?.streak || 0}d</span>
-            </button>
-            <button className="fitscan-icon-button" type="button" onClick={onLogout} aria-label="Log out">
-              <LogOut size={16} />
             </button>
           </div>
         </header>
@@ -434,37 +615,42 @@ export default function Dashboard({ userAuth, userProfile, authToken, onNavigate
 
         <section className="fitscan-action-card" aria-label="Main actions">
           <button type="button" onClick={() => onNavigate('home')}>
-            <span className="fitscan-action-icon is-scan">
+          <span className="fitscan-action-icon is-scan">
               <Camera size={24} />
             </span>
-            <span>Scan Product</span>
+            <span>{t('scan_product')}</span>
           </button>
           <button type="button" onClick={() => onNavigate('foodDatabase')}>
             <span className="fitscan-action-icon is-food">
               <Search size={24} />
             </span>
-            <span>Food Database</span>
+            <span>{t('food_database')}</span>
           </button>
         </section>
 
         <section className="fitscan-recent-card">
           <div className="fitscan-section-heading">
             <div>
-              <span>Recent Scans</span>
+              <span>{t('recent_scans')}</span>
               <strong>{latestScanLabel}</strong>
             </div>
-            <button type="button" onClick={() => onNavigate('history')}>View all</button>
+            <button type="button" onClick={() => onNavigate('history')}>{t('view_all')}</button>
           </div>
 
           {isLoadingHistory ? (
             <div className="fitscan-empty-state">
               <Activity size={18} />
-              <span>Loading scans...</span>
+              <span>{t('loading_scans')}</span>
             </div>
           ) : recentScans.length ? (
             <div className="fitscan-recent-list">
               {recentScans.map((scan) => (
-                <button key={scan.id} type="button" onClick={() => onNavigate('history')}>
+                <button
+                  key={scan.id}
+                  type="button"
+                  onClick={() => handleScanClick(scan)}
+                  aria-label={`View details for ${scan.product_name}`}
+                >
                   {scan.image_url ? (
                     <span className="fitscan-food-thumb">
                       <img
@@ -481,22 +667,33 @@ export default function Dashboard({ userAuth, userProfile, authToken, onNavigate
                       <Utensils size={17} />
                     </span>
                   )}
-                  <span>
+                  <span className="fitscan-recent-copy">
                     <strong>{scan.product_name || 'Product'}</strong>
                     <small>{scan.brand || 'Unknown brand'}</small>
+                    <span className="fitscan-nutrient-row" aria-label="Key nutrition facts per serving">
+                      {getRecentNutrientChips(scan, scan.servings || 1).map((nutrient) => (
+                        <span className="fitscan-nutrient-chip" key={nutrient.label}>
+                          <span aria-hidden="true">{nutrient.icon}</span>
+                          <b>{nutrient.value}</b>
+                        </span>
+                      ))}
+                    </span>
                   </span>
-                  <em>{scan.score || '--'}</em>
+                  <div className="fitscan-recent-meta">
+                    <em>{scan.score || '--'}</em>
+                    <ChevronRight size={14} className="fitscan-recent-arrow" />
+                  </div>
                 </button>
               ))}
             </div>
           ) : (
             <div className="fitscan-empty-state">
               <Camera size={18} />
-              <span>No scans yet. Start with your first product.</span>
+              <span>{t('no_scans')}</span>
             </div>
           )}
         </section>
-        
+
         <BMICard userProfile={userProfile} onNavigate={onNavigate} />
 
         <BottomNav onNavigate={onNavigate} />

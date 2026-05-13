@@ -1,8 +1,43 @@
-import React, { useRef } from 'react';
-import { Camera, Upload, Barcode, ArrowLeft, Mic } from 'lucide-react';
+import { useRef, useState, useEffect } from 'react';
+import { Camera, Upload, Barcode, ArrowLeft, Mic, Zap, Search, History, Image as ImageIcon, RotateCcw, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
-export default function Home({ onImageSelected, onNavigateProfile, onBack, onNavigateBarcode, onNavigateNote }) {
+export default function Home({ onImageSelected, onBack, onNavigateBarcode }) {
+  const { t } = useTranslation();
   const fileInputRef = useRef(null);
+  const videoRef = useRef(null);
+  const [hasCameraAccess, setHasCameraAccess] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [isNoteExpanded, setIsNoteExpanded] = useState(false);
+  const [note, setNote] = useState("");
+  const [toast, setToast] = useState(null);
+
+  // Initialize Camera Preview
+  useEffect(() => {
+    let activeStream = null;
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
+        activeStream = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          setHasCameraAccess(true);
+        }
+      } catch (err) {
+        console.error("Camera access denied or not available:", err);
+        setHasCameraAccess(false);
+      }
+    }
+    startCamera();
+
+    return () => {
+      activeStream?.getTracks().forEach(track => track.stop());
+    };
+  }, []);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -19,108 +54,189 @@ export default function Home({ onImageSelected, onNavigateProfile, onBack, onNav
         canvas.width = width; canvas.height = height;
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
         onImageSelected(canvas.toDataURL('image/jpeg', 0.85));
+        showToast(t('image_processed'), "success");
       };
       img.src = event.target.result;
     };
     reader.readAsDataURL(file);
   };
 
-  const openCamera = () => {
-    if (fileInputRef.current) { fileInputRef.current.setAttribute('capture', 'environment'); fileInputRef.current.click(); }
+  const capturePhoto = () => {
+    if (hasCameraAccess && videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
+      onImageSelected(canvas.toDataURL('image/jpeg', 0.85));
+      showToast(t('photo_captured'), "success");
+    } else {
+      // Fallback to native camera
+      if (fileInputRef.current) {
+        fileInputRef.current.setAttribute('capture', 'environment');
+        fileInputRef.current.click();
+      }
+    }
   };
+
   const openGallery = () => {
-    if (fileInputRef.current) { fileInputRef.current.removeAttribute('capture'); fileInputRef.current.click(); }
+    if (fileInputRef.current) {
+      fileInputRef.current.removeAttribute('capture');
+      fileInputRef.current.click();
+    }
+  };
+
+  const showToast = (message, type = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center pb-24 animate-fade-in-up" style={{ background: 'var(--ns-surface)', fontFamily: 'var(--font-main)' }}>
-      
-      {/* Abstract Background Elements */}
-      <div className="fixed top-0 right-0 w-72 h-72 rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.05) 0%, transparent 70%)' }} />
-      <div className="fixed bottom-0 left-0 w-80 h-80 rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(circle, rgba(35,172,241,0.05) 0%, transparent 70%)' }} />
+    <div className="scan-screen-wrapper">
+      {/* Toast Notification */}
+      {toast && (
+        <div className="scan-toast" style={{ background: toast.type === 'error' ? 'var(--ns-error)' : 'var(--ns-success)' }}>
+          {toast.type === 'error' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+          <span>{toast.message}</span>
+        </div>
+      )}
+
+      {/* Header */}
+      <header className="scan-header">
+        <button onClick={onBack} className="scan-header-btn">
+          <ArrowLeft size={22} />
+        </button>
+        <h1>{t('scanner')}</h1>
+        <button onClick={() => window.location.hash = '#/history'} className="scan-header-btn">
+          <History size={22} />
+        </button>
+      </header>
 
       <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileChange} />
 
-      <div className="w-full max-w-md px-6 flex flex-col gap-6 pt-12 relative z-10">
-        
-        {/* Header */}
-        <div className="relative flex items-center justify-center mb-2">
-          <button onClick={onBack} className="absolute left-0 p-2 rounded-full transition-colors flex items-center justify-center bg-white/5 hover:bg-white/10" style={{ color: 'var(--ns-on-surface-var)' }}>
-            <ArrowLeft size={20} />
-          </button>
-          <h1 className="text-xl font-black tracking-widest uppercase" style={{ fontFamily: 'var(--font-headline)', color: 'var(--ns-on-surface)' }}>
-            SCAN
-          </h1>
-        </div>
+      {/* Main Viewfinder Section */}
+      <main className="scan-viewfinder-container">
+        <div className={`scan-frame ${hasCameraAccess ? 'is-active' : ''}`}>
+          {/* Live Video or Placeholder */}
+          <div className="scan-live-preview">
+            {hasCameraAccess ? (
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover"
+                style={{ transform: `scale(${zoom})` }}
+              />
+            ) : (
+              <>
+                <Camera size={48} className="scan-preview-muted" />
+                <p className="scan-preview-message">{t('camera_unavailable')}</p>
+              </>
+            )}
 
-        {/* Large Camera Button */}
-        <button 
-          onClick={openCamera}
-          className="w-full aspect-square rounded-[32px] flex flex-col items-center justify-center gap-4 transition-all hover:scale-[0.98] active:scale-95 group relative overflow-hidden"
-          style={{ 
-            background: 'linear-gradient(135deg, rgba(0,108,73,0.1), rgba(16,185,129,0.05))',
-            border: '1.5px solid rgba(16,185,129,0.3)',
-            boxShadow: '0 12px 40px rgba(0,0,0,0.05)'
-          }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-br from-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="w-20 h-20 rounded-full flex items-center justify-center mb-2 transition-transform group-hover:scale-110"
-            style={{ background: 'linear-gradient(135deg,#006c49,#10B981)', boxShadow: '0 8px 24px rgba(0,108,73,0.4)' }}>
-            <Camera size={36} color="white" />
+            {/* Laser Line */}
+            <div className="scan-laser" />
+
+            {/* Brackets */}
+            <div className="scan-brackets">
+              <div className="scan-bracket bracket-tl" />
+              <div className="scan-bracket bracket-tr" />
+              <div className="scan-bracket bracket-bl" />
+              <div className="scan-bracket bracket-br" />
+            </div>
+
+            {/* Torch Toggle */}
+            <button
+              onClick={() => setTorchOn(!torchOn)}
+              className="scan-torch-button"
+            >
+              <Zap size={20} className={torchOn ? "scan-torch-on" : ""} />
+            </button>
           </div>
-          <span className="text-xl font-bold tracking-wide" style={{ color: 'var(--ns-primary)', fontFamily: 'var(--font-headline)' }}>Camera</span>
-        </button>
 
-        {/* Action Row: Barcode & Upload */}
-        <div className="grid grid-cols-2 gap-4">
-          <button 
-            onClick={onNavigateBarcode}
-            className="rounded-[24px] p-6 flex flex-col items-center justify-center gap-3 transition-all hover:scale-[0.98] active:scale-95 group relative overflow-hidden"
-            style={{ 
-              background: 'rgba(35,172,241,0.05)',
-              border: '1.5px solid rgba(35,172,241,0.2)',
-            }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110" style={{ background: 'rgba(35,172,241,0.15)' }}>
-              <Barcode size={24} style={{ color: 'var(--ns-tertiary-con)' }} />
-            </div>
-            <span className="text-sm font-bold tracking-wide" style={{ color: 'var(--ns-on-surface)' }}>Barcode</span>
+          <div className="scan-helper-text">
+            {t('point_camera')}
+          </div>
+        </div>
+
+        {/* Zoom Slider */}
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-48 flex flex-col gap-2">
+          <input
+            type="range"
+            min="1"
+            max="3"
+            step="0.1"
+            value={zoom}
+            onChange={(e) => setZoom(parseFloat(e.target.value))}
+            className="scan-zoom-slider"
+          />
+          <div className="scan-zoom-labels">
+            <span>1X</span>
+            <span>{t('zoom')}</span>
+            <span>3X</span>
+          </div>
+        </div>
+      </main>
+
+      {/* Bottom Interface */}
+      <footer className="scan-bottom-bar">
+        {/* Note Field (Expandable) */}
+        <div
+          className={`scan-note-field ${isNoteExpanded ? 'is-expanded' : ''}`}
+          onClick={() => setIsNoteExpanded(!isNoteExpanded)}
+        >
+          <Mic size={20} className={note ? "scan-note-active" : "scan-note-muted"} />
+          {isNoteExpanded ? (
+            <input
+              autoFocus
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={t('add_nutritional_note')}
+              className="scan-note-input"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span className="scan-note-placeholder">
+              {note || t('add_note')}
+            </span>
+          )}
+          {note && !isNoteExpanded && <CheckCircle2 size={16} className="scan-note-active" />}
+        </div>
+
+        {/* Capture Control Row */}
+        <div className="scan-capture-row">
+          <button onClick={() => window.location.reload()} className="scan-control-icon">
+            <RotateCcw size={22} />
           </button>
 
-          <button 
-            onClick={openGallery}
-            className="rounded-[24px] p-6 flex flex-col items-center justify-center gap-3 transition-all hover:scale-[0.98] active:scale-95 group relative overflow-hidden"
-            style={{ 
-              background: 'rgba(253,118,26,0.05)',
-              border: '1.5px solid rgba(253,118,26,0.2)',
-            }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110" style={{ background: 'rgba(253,118,26,0.15)' }}>
-              <Upload size={24} style={{ color: 'var(--ns-secondary-con)' }} />
-            </div>
-            <span className="text-sm font-bold tracking-wide" style={{ color: 'var(--ns-on-surface)' }}>Upload</span>
+          <button onClick={capturePhoto} className="scan-capture-btn">
+            <div className="scan-capture-btn-inner" />
+          </button>
+
+          <button className="scan-control-icon">
+            <Search size={22} />
           </button>
         </div>
 
-        {/* Note Button */}
-        <button 
-          onClick={onNavigateNote}
-          className="w-full rounded-[24px] p-5 flex items-center justify-center gap-3 transition-all hover:scale-[0.98] active:scale-95 group mt-2 relative overflow-hidden"
-          style={{ 
-            background: 'var(--ns-surface-low)',
-            border: '1.5px solid var(--ns-outline-var)',
-          }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-br from-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <Mic size={20} style={{ color: 'var(--ns-on-surface-var)' }} />
-          <span className="text-sm font-bold tracking-wide" style={{ color: 'var(--ns-on-surface)' }}>Note</span>
-        </button>
+        {/* Secondary Actions Grid */}
+        <div className="scan-actions-grid">
+          <button onClick={onNavigateBarcode} className="scan-action-btn">
+            <Barcode size={24} />
+            <span className="text-[10px] font-black tracking-widest uppercase">{t('barcode')}</span>
+          </button>
 
-      </div>
+          <button onClick={openGallery} className="scan-action-btn">
+            <ImageIcon size={24} />
+            <span className="text-[10px] font-black tracking-widest uppercase">{t('gallery')}</span>
+          </button>
+
+          <button onClick={openGallery} className="scan-action-btn">
+            <Upload size={24} />
+            <span className="text-[10px] font-black tracking-widest uppercase">{t('upload')}</span>
+          </button>
+        </div>
+      </footer>
     </div>
   );
 }

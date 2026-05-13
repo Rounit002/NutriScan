@@ -267,7 +267,16 @@ router.get('/me', authenticate, async (req, res) => {
 router.put('/profile', authenticate, async (req, res) => {
   const { profile } = req.body;
   try {
-    const nextProfile = { ...(profile || {}) };
+    const userRes = await req.pool.query(
+      'SELECT profile FROM users WHERE id = $1',
+      [req.userId]
+    );
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const currentProfile = userRes.rows[0].profile || {};
+    const nextProfile = { ...currentProfile, ...(profile || {}) };
     if (Object.prototype.hasOwnProperty.call(nextProfile, 'conditions')) {
       nextProfile.conditions = normalizeConditions(nextProfile.conditions);
     }
@@ -287,7 +296,12 @@ router.put('/profile', authenticate, async (req, res) => {
       await syncHealthGoals(req.pool, req.userId, nextProfile.goals);
     }
 
-    res.json({ success: true });
+    const updatedRes = await req.pool.query(
+      'SELECT id, email, name, points, streak, profile FROM users WHERE id = $1',
+      [req.userId]
+    );
+    const updatedUser = await hydrateUserMedicalProfile(req.pool, updatedRes.rows[0]);
+    res.json({ success: true, user: updatedUser });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to update profile' });
@@ -337,6 +351,62 @@ router.put('/details', authenticate, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to update personal details' });
+  }
+});
+
+// Save compressed profile picture directly in profile JSON
+router.put('/profile-picture', authenticate, async (req, res) => {
+  const { imageBase64 } = req.body;
+  console.log('━━━ PUT /auth/profile-picture ━━━');
+  console.log('  User id:', req.userId);
+  console.log('  Payload:', imageBase64 ? `${typeof imageBase64} (${imageBase64.length} chars)` : 'MISSING');
+
+  if (!imageBase64 || typeof imageBase64 !== 'string') {
+    console.error('  ✗ Profile picture upload failed: imageBase64 is missing or invalid');
+    return res.status(400).json({ error: 'imageBase64 is required' });
+  }
+
+  try {
+    const userRes = await req.pool.query(
+      'SELECT profile FROM users WHERE id = $1',
+      [req.userId]
+    );
+    if (userRes.rows.length === 0) {
+      console.error('  ✗ Profile picture upload failed: user not found');
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!imageBase64.startsWith('data:image/')) {
+      console.error('  ✗ Profile picture save failed: payload is not an image data URL');
+      return res.status(400).json({ error: 'Profile picture must be an image data URL' });
+    }
+
+    console.log('  → Saving compressed Base64 profile image to database...');
+
+    const currentProfile = userRes.rows[0].profile || {};
+    const nextProfile = {
+      ...currentProfile,
+      profileImageUrl: imageBase64,
+      avatarUrl: imageBase64,
+      profileImageStorage: 'database-base64',
+      profileImageUpdatedAt: new Date().toISOString(),
+    };
+
+    await req.pool.query(
+      'UPDATE users SET profile = $1 WHERE id = $2',
+      [JSON.stringify(nextProfile), req.userId]
+    );
+    console.log('  ✓ Profile image saved in user profile JSON');
+
+    const updatedRes = await req.pool.query(
+      'SELECT id, email, name, points, streak, profile FROM users WHERE id = $1',
+      [req.userId]
+    );
+    const updatedUser = await hydrateUserMedicalProfile(req.pool, updatedRes.rows[0]);
+    res.json({ user: updatedUser, imageUrl: imageBase64 });
+  } catch (error) {
+    console.error('  ✗ Profile picture upload failed:', error);
+    res.status(500).json({ error: 'Failed to upload profile picture' });
   }
 });
 

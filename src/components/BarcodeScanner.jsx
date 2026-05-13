@@ -43,7 +43,7 @@ export default function BarcodeScanner({ onScan, onBack }) {
         <h2 className="text-2xl font-black text-white leading-tight">Barcode Scan</h2>
         <p className="text-secondary text-xs font-bold opacity-60">Align the code within the frame</p>
       </div>
-      
+
       <div className="glass-card !p-2 overflow-hidden bg-white group relative shadow-2xl" style={{ borderRadius: '24px' }}>
         <div className="absolute inset-0 bg-accent-primary/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
         <div id="reader" className="w-full text-black font-bold"></div>

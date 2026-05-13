@@ -13,6 +13,7 @@ import BarcodeScanner from './components/BarcodeScanner';
 import StreakLeaderboard from './components/StreakLeaderboard';
 import FeatureRequests from './components/FeatureRequests';
 import FoodDatabase from './components/FoodDatabase';
+import Trends from './components/Trends';
 import { analyzeFoodImage, analyzeFoodText } from './geminiService';
 import { useTheme } from './components/ThemeToggle';
 
@@ -192,10 +193,6 @@ export default function App() {
     setCurrentView('loading');
     setError(null);
     try {
-      // We'll send the high-quality image to the backend for Cloudinary upload
-      // but we still generate a small thumbnail for immediate UI feedback if needed
-      const thumbnail = await generateThumbnail(imageBase64);
-
       const result = await analyzeFoodImage(imageBase64, userProfile);
       setAnalysisResult(result);
       setCurrentView('results');
@@ -221,7 +218,10 @@ export default function App() {
             productData: {
               product_name: result.productName,
               brands: result.brand,
-              ingredients_text: result.ingredientsAnalysis?.map((item) => item.name).join(', ') || ''
+              ingredients_text: result.ingredientsAnalysis?.map((item) => item.name).join(', ') || '',
+              serving_size: result.nutrition?.serving_size || result.nutriments?.serving_size || null,
+              serving_quantity: result.nutrition?.serving_quantity || result.nutriments?.serving_quantity || null,
+              nutriments: result.nutriments || result.nutrition || null
             }
           })
         });
@@ -252,7 +252,13 @@ export default function App() {
           || null;
 
         const result = await analyzeFoodText(data.product, userProfile);
-        setAnalysisResult(result);
+        const enrichedResult = {
+          ...result,
+          nutriments: result.nutriments || result.nutrition || data.product?.nutriments || null,
+          nutrition: result.nutrition || result.nutriments || data.product?.nutriments || null,
+          rawProductData: data.product,
+        };
+        setAnalysisResult(enrichedResult);
         setCurrentView('results');
 
         if (authToken) {
@@ -263,14 +269,14 @@ export default function App() {
               'Authorization': `Bearer ${authToken}`
             },
             body: JSON.stringify({
-              productName: result.productName,
-              brand: result.brand,
-              score: result.score,
-              verdict: JSON.stringify(result.verdict),
+              productName: enrichedResult.productName,
+              brand: enrichedResult.brand,
+              score: enrichedResult.score,
+              verdict: JSON.stringify(enrichedResult.verdict),
               explanation: '',
-              ingredients: JSON.stringify(result.ingredientsAnalysis),
-              alternatives: result.alternatives,
-              sideEffects: result.sideEffects,
+              ingredients: JSON.stringify(enrichedResult.ingredientsAnalysis),
+              alternatives: enrichedResult.alternatives,
+              sideEffects: enrichedResult.sideEffects,
               imageUrl: productImageUrl,
               productData: data.product
             })
@@ -300,8 +306,15 @@ export default function App() {
         || product?.image_url
         || null;
 
-      const result = await analyzeFoodText(product, userProfile);
-      setAnalysisResult(result);
+      const productData = product.rawProductData || product;
+      const result = await analyzeFoodText(productData, userProfile);
+      const enrichedResult = {
+        ...result,
+        nutriments: result.nutriments || result.nutrition || productData?.nutriments || null,
+        nutrition: result.nutrition || result.nutriments || productData?.nutriments || null,
+        rawProductData: productData,
+      };
+      setAnalysisResult(enrichedResult);
       setCurrentView('results');
 
       if (authToken) {
@@ -312,16 +325,16 @@ export default function App() {
             'Authorization': `Bearer ${authToken}`
           },
           body: JSON.stringify({
-            productName: result.productName,
-            brand: result.brand,
-            score: result.score,
-            verdict: JSON.stringify(result.verdict),
+            productName: enrichedResult.productName,
+            brand: enrichedResult.brand,
+            score: enrichedResult.score,
+            verdict: JSON.stringify(enrichedResult.verdict),
             explanation: '',
-            ingredients: JSON.stringify(result.ingredientsAnalysis),
-            alternatives: result.alternatives,
-            sideEffects: result.sideEffects,
+            ingredients: JSON.stringify(enrichedResult.ingredientsAnalysis),
+            alternatives: enrichedResult.alternatives,
+            sideEffects: enrichedResult.sideEffects,
             imageUrl: productImageUrl,
-            productData: product.rawProductData || product
+            productData
           })
         });
         refreshStreak();
@@ -387,6 +400,10 @@ export default function App() {
           userProfile={userProfile}
           authToken={authToken}
           onNavigate={(view) => setCurrentView(view)}
+          onViewDetail={(result) => {
+            setAnalysisResult(result);
+            setCurrentView('results');
+          }}
           isDark={isDark}
           toggleTheme={toggleTheme}
           onLogout={handleLogout}
@@ -398,6 +415,13 @@ export default function App() {
           userAuth={userAuth}
           authToken={authToken}
           onBack={() => setCurrentView('dashboard')}
+        />
+      )}
+
+      {currentView === 'trends' && (
+        <Trends
+          authToken={authToken}
+          onNavigate={(view) => setCurrentView(view)}
         />
       )}
 
@@ -472,6 +496,10 @@ export default function App() {
         <Results
           result={analysisResult}
           onBack={handleBackToHome}
+          authToken={authToken}
+          onServingsChanged={(scanId, newServings) => {
+            setAnalysisResult(prev => prev ? { ...prev, servings: newServings } : prev);
+          }}
         />
       )}
     </main>

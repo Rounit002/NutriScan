@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Database, Search, Sparkles, Utensils } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const { t } = useTranslation();
 
   useEffect(() => {
     let isMounted = true;
@@ -14,7 +16,7 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
     const loadProducts = async () => {
       if (!authToken) {
         setIsLoading(false);
-        setError('Sign in again to view the food database.');
+        setError(t('sign_in_food_db'));
         return;
       }
 
@@ -36,7 +38,7 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
       } catch (loadError) {
         if (loadError.name !== 'AbortError') {
           console.error(loadError);
-          if (isMounted) setError('Could not load scanned products.');
+          if (isMounted) setError(t('could_not_load'));
         }
       } finally {
         if (isMounted) setIsLoading(false);
@@ -53,10 +55,20 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
   }, [authToken, searchTerm]);
 
   const productCountLabel = useMemo(() => {
-    if (isLoading) return 'Loading products';
-    if (products.length === 1) return '1 shared product';
-    return `${products.length} shared products`;
+    if (isLoading) return t('loading_products');
+    if (products.length === 1) return t('shared_product_one');
+    return t('shared_product', { count: products.length });
   }, [isLoading, products.length]);
+
+  const getProductImage = (product) => {
+    const rawProductData = product.rawProductData || product.raw_product_data || {};
+    return product.image_url
+      || rawProductData.image_front_small_url
+      || rawProductData.image_front_url
+      || rawProductData.image_small_url
+      || rawProductData.image_url
+      || null;
+  };
 
   return (
     <div className="food-db-page">
@@ -67,7 +79,7 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
           </button>
           <div>
             <span>FitScan</span>
-            <h1>Food Database</h1>
+            <h1>{t('food_db_title')}</h1>
           </div>
           <Database size={22} />
         </header>
@@ -75,7 +87,7 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
         <section className="food-db-hero">
           <div>
             <strong>{productCountLabel}</strong>
-            <p>Search products scanned by everyone, then analyze one for your own health profile.</p>
+            <p>{t('food_db_desc')}</p>
           </div>
           <Sparkles size={24} />
         </section>
@@ -86,7 +98,7 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
             type="search"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search any scanned product"
+            placeholder={t('search_scanned_product')}
             aria-label="Search scanned products"
           />
         </div>
@@ -99,28 +111,36 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
               <div className="food-db-skeleton" key={index} />
             ))
           ) : products.length ? (
-            products.map((product) => (
-              <button
-                className="food-db-card"
-                key={`${product.brands}-${product.product_name}-${product.id}`}
-                type="button"
-                onClick={() => onSelectProduct(product)}
-              >
-                <span className="food-db-mark">
-                  <Utensils size={18} />
-                </span>
-                <span className="food-db-copy">
-                  <strong>{product.product_name || 'Unknown Product'}</strong>
-                  <small>{product.brands || 'Unknown Brand'}</small>
-                </span>
-                <span className="food-db-score">{product.latest_score || '--'}</span>
-              </button>
-            ))
+            products.map((product) => {
+              const productImage = getProductImage(product);
+
+              return (
+                <button
+                  className="food-db-card"
+                  key={`${product.brands}-${product.product_name}-${product.id}`}
+                  type="button"
+                  onClick={() => onSelectProduct(product)}
+                >
+                  <span className="food-db-mark">
+                    {productImage ? (
+                      <img src={productImage} alt="" loading="lazy" />
+                    ) : (
+                      <Utensils size={18} />
+                    )}
+                  </span>
+                  <span className="food-db-copy">
+                    <strong>{product.product_name || t('unknown_product')}</strong>
+                    <small>{product.brands || t('unknown_brand')}</small>
+                  </span>
+                  <span className="food-db-score">{product.latest_score || '--'}</span>
+                </button>
+              );
+            })
           ) : (
             <div className="food-db-empty">
               <Database size={28} />
-              <strong>No products found</strong>
-              <span>Try another search or scan a product first.</span>
+              <strong>{t('no_products_found_db')}</strong>
+              <span>{t('try_another_search')}</span>
             </div>
           )}
         </div>

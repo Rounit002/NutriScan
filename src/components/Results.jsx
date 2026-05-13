@@ -1,13 +1,16 @@
 import { useRef, useState } from 'react';
-import { ArrowLeft, AlertTriangle, CheckCircle, Info, XCircle, Share2, Leaf, TrendingUp } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Check, CheckCircle, Info, Pencil, XCircle, Share2, Leaf, TrendingUp } from 'lucide-react';
 import { toPng } from 'html-to-image';
+import { getNutritionChips } from '../utils/nutrition';
+import { useTranslation } from 'react-i18next';
 
 function HealthRingLarge({ score }) {
+  const { t } = useTranslation();
   const radius = 68;
   const circ = 2 * Math.PI * radius;
   const pct = Math.min(Math.max(score / 10, 0), 1);
   const dash = circ * pct;
-  const color = score >= 8 ? '#10B981' : score >= 6 ? '#22c55e' : score >= 4 ? '#fd761a' : '#ba1a1a';
+  const color = score >= 8 ? '#4B6F44' : score >= 6 ? '#4B6F44' : score >= 4 ? '#fd761a' : '#ba1a1a';
 
   return (
     <div className="health-score-ring result-score-ring" aria-label={`Average score ${score} out of 10`}>
@@ -28,25 +31,29 @@ function HealthRingLarge({ score }) {
       <div className="result-score-copy">
         <span>{score}</span>
         <em>/10</em>
-        <strong style={{ color }}>Health Score</strong>
+        <strong style={{ color }}>{t('health_score')}</strong>
       </div>
     </div>
   );
 }
 
-export default function Results({ result, onBack }) {
+export default function Results({ result, onBack, authToken, onServingsChanged }) {
   const summaryRef = useRef(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [activeTab, setActiveTab] = useState('truth');
+  const [servings, setServings] = useState(() => result?.servings || 1);
+  const [servingsDraft, setServingsDraft] = useState(() => String(result?.servings || 1));
+  const [isEditingServings, setIsEditingServings] = useState(false);
+  const { t } = useTranslation();
 
   if (!result) return null;
 
   const getVerdict = (score) => {
-    if (score >= 8) return { status: 'SAFE TO CONSUME', sub: 'A genuinely healthy choice', icon: CheckCircle, color: '#006c49', bg: 'rgba(16,185,129,0.08)', border: 'rgba(16,185,129,0.25)' };
-    if (score >= 6) return { status: 'MOSTLY SAFE', sub: 'Decent, with minor concerns', icon: CheckCircle, color: '#16a34a', bg: 'rgba(34,197,94,0.08)', border: 'rgba(34,197,94,0.25)' };
-    if (score >= 4) return { status: 'USE CAUTION', sub: 'Consume in moderation only', icon: AlertTriangle, color: '#b45309', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.3)' };
-    if (score >= 2) return { status: 'HIGH RISK', sub: 'Significant health concerns', icon: AlertTriangle, color: '#9d4300', bg: 'rgba(253,118,26,0.08)', border: 'rgba(253,118,26,0.3)' };
-    return { status: 'AVOID', sub: 'Serious health risk detected', icon: XCircle, color: '#ba1a1a', bg: 'rgba(186,26,26,0.06)', border: 'rgba(186,26,26,0.25)' };
+    if (score >= 8) return { status: t('safe_to_consume'), sub: t('safe_to_consume_sub'), icon: CheckCircle, color: '#4B6F44', bg: 'rgba(75, 111, 68,0.08)', border: 'rgba(75, 111, 68,0.25)' };
+    if (score >= 6) return { status: t('mostly_safe'), sub: t('mostly_safe_sub'), icon: CheckCircle, color: '#4B6F44', bg: 'rgba(75, 111, 68,0.08)', border: 'rgba(75, 111, 68,0.25)' };
+    if (score >= 4) return { status: t('use_caution'), sub: t('use_caution_sub'), icon: AlertTriangle, color: '#b45309', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.3)' };
+    if (score >= 2) return { status: t('high_risk'), sub: t('high_risk_sub'), icon: AlertTriangle, color: '#9d4300', bg: 'rgba(253,118,26,0.08)', border: 'rgba(253,118,26,0.3)' };
+    return { status: t('avoid'), sub: t('avoid_sub'), icon: XCircle, color: '#ba1a1a', bg: 'rgba(186,26,26,0.06)', border: 'rgba(186,26,26,0.25)' };
   };
 
   const verdict = getVerdict(result.score);
@@ -69,11 +76,11 @@ export default function Results({ result, onBack }) {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        alert('Result card downloaded!');
+        alert(t('result_downloaded'));
       }
     } catch (err) {
       console.error(err);
-      alert('Sharing failed. Try a screenshot.');
+      alert(t('sharing_failed'));
     } finally {
       setIsCapturing(false);
     }
@@ -100,6 +107,39 @@ export default function Results({ result, onBack }) {
   };
 
   const verdictItems = parseVerdict(activeTab === 'truth' ? result.verdict : (result.sideEffects || []));
+  const nutritionChips = getNutritionChips(result, servings);
+
+  const startEditingServings = () => {
+    setServingsDraft(String(servings));
+    setIsEditingServings(true);
+  };
+
+  const saveServings = async () => {
+    const parsed = Number(servingsDraft);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      const newServings = Math.round(parsed * 100) / 100;
+      setServings(newServings);
+      setServingsDraft(String(newServings));
+      setIsEditingServings(false);
+
+      // Persist to backend if we have a scan ID
+      if (authToken && result.scanId) {
+        try {
+          await fetch(`http://localhost:5000/scans/${result.scanId}/servings`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({ servings: newServings }),
+          });
+          onServingsChanged?.(result.scanId, newServings);
+        } catch (err) {
+          console.error('Failed to persist servings:', err);
+        }
+      }
+    }
+  };
 
   return (
     <div className="result-page animate-fade-in-up">
@@ -107,14 +147,20 @@ export default function Results({ result, onBack }) {
         <button onClick={onBack} className="result-back-button" aria-label="Go back">
           <ArrowLeft size={20} />
         </button>
-        <h1>Nutrition Analysis</h1>
+        <h1>{t('nutrition_analysis')}</h1>
         <div className="result-header-spacer" />
       </header>
 
       <main className="result-content">
-        <div ref={summaryRef} id="summary-card" className="result-summary-card ns-card">
+        <div 
+          ref={summaryRef} 
+          id="summary-card" 
+          className={`result-summary-card ns-card ${result.image_url ? 'has-bg-image' : ''}`}
+          style={result.image_url ? { '--bg-img': `url(${result.image_url})` } : undefined}
+        >
+
           <div className="result-product-copy">
-            <p>{result.brand || 'Unknown Brand'}</p>
+            <p>{result.brand || t('unknown_brand')}</p>
             <h2>{result.productName}</h2>
           </div>
 
@@ -128,17 +174,60 @@ export default function Results({ result, onBack }) {
             <p>{verdict.sub}</p>
           </div>
 
+          <div className="result-nutrition-editor">
+            <div className="servings-control">
+              <label htmlFor="servings-input">{t('servings')}</label>
+              <div className="servings-edit-box">
+                {isEditingServings ? (
+                  <>
+                    <input
+                      id="servings-input"
+                      type="text"
+                      inputMode="decimal"
+                      value={servingsDraft}
+                      onChange={(e) => setServingsDraft(e.target.value.replace(/[^\d.]/g, ''))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveServings();
+                      }}
+                      autoFocus
+                      aria-label="Enter servings"
+                    />
+                    <button type="button" onClick={saveServings} aria-label="Save servings">
+                      <Check size={16} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <strong>{servings}</strong>
+                    <button type="button" onClick={startEditingServings} aria-label="Edit servings">
+                      <Pencil size={15} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            
+            <div className="result-macros-grid" aria-label="Nutrition facts per serving">
+              {nutritionChips.map((nutrient) => (
+                <div className="result-macro-item" key={nutrient.key}>
+                  <span><span aria-hidden="true">{nutrient.icon}</span>{nutrient.label}</span>
+                  <strong>{nutrient.value}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="result-ai-label">
             <Leaf size={13} />
-            <span>Scanned with NutriScan AI</span>
+            <span>{t('scanned_with_ai')}</span>
           </div>
         </div>
 
         <button onClick={handleShare} disabled={isCapturing} className="result-primary-button btn-primary" style={{ opacity: isCapturing ? 0.6 : 1 }}>
           {isCapturing ? (
-            <><span className="result-button-spinner" /> Generating...</>
+            <><span className="result-button-spinner" /> {t('generating')}</>
           ) : (
-            <><Share2 size={18} /> Share Result</>
+            <><Share2 size={18} /> {t('share_result')}</>
           )}
         </button>
 
@@ -148,14 +237,14 @@ export default function Results({ result, onBack }) {
             className={activeTab === 'truth' ? 'is-active' : ''}
             style={{ color: activeTab === 'truth' ? 'var(--ns-primary)' : 'var(--ns-outline)' }}
           >
-            The Full Truth
+            {t('full_truth')}
           </button>
           <button
             onClick={() => setActiveTab('effects')}
             className={activeTab === 'effects' ? 'is-active is-danger' : ''}
             style={{ color: activeTab === 'effects' ? 'var(--ns-error)' : 'var(--ns-outline)' }}
           >
-            Side Effects
+            {t('side_effects')}
           </button>
         </div>
 
@@ -163,15 +252,15 @@ export default function Results({ result, onBack }) {
           {activeTab === 'effects' && (!verdictItems || verdictItems.length === 0) ? (
             <div className="result-empty-facts">
               <CheckCircle size={24} style={{ color: 'var(--ns-primary)' }} />
-              <p>No significant side effects detected based on your profile.</p>
+              <p>{t('no_side_effects')}</p>
             </div>
           ) : Array.isArray(verdictItems) ? verdictItems.map((point, idx) => {
             const isEffects = activeTab === 'effects';
             const isGood = !isEffects && point.toLowerCase().startsWith('good:');
             const isBad = !isEffects && point.toLowerCase().startsWith('bad:');
             const label = isGood ? point.replace(/^good:\s*/i, '') : isBad ? point.replace(/^bad:\s*/i, '') : point;
-            const dotColor = isEffects ? '#ba1a1a' : isGood ? '#10B981' : isBad ? '#ba1a1a' : 'var(--ns-outline)';
-            const bg = isEffects ? 'rgba(186,26,26,0.06)' : isGood ? 'rgba(16,185,129,0.07)' : isBad ? 'rgba(186,26,26,0.06)' : 'var(--ns-surface-low)';
+            const dotColor = isEffects ? '#ba1a1a' : isGood ? '#4B6F44' : isBad ? '#ba1a1a' : 'var(--ns-outline)';
+            const bg = isEffects ? 'rgba(186,26,26,0.06)' : isGood ? 'rgba(75, 111, 68,0.07)' : isBad ? 'rgba(186,26,26,0.06)' : 'var(--ns-surface-low)';
 
             return (
               <div key={idx} className="result-fact-item" style={{ background: bg }}>
@@ -190,11 +279,31 @@ export default function Results({ result, onBack }) {
           )}
         </div>
 
+        {result.alternatives && result.alternatives.length > 0 && (
+          <section className="result-section">
+            <div className="result-section-heading is-alternative">
+              <TrendingUp size={16} />
+              <h3>{t('healthier_alternatives')}</h3>
+            </div>
+            <div className="result-section-list">
+              {result.alternatives.map((alt, idx) => (
+                <div key={idx} className="result-audit-card ns-card">
+                  <div className="result-accent-bar is-alternative" />
+                  <div className="result-audit-body">
+                    <p className="result-alt-name">{alt.name}</p>
+                    <p>{alt.reason}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {result.ingredientsAnalysis && result.ingredientsAnalysis.length > 0 && (
           <section className="result-section">
             <div className="result-section-heading">
               <Info size={16} />
-              <h3>Ingredient Audit</h3>
+              <h3>{t('ingredient_audit')}</h3>
             </div>
             <div className="result-section-list">
               {result.ingredientsAnalysis
@@ -202,8 +311,8 @@ export default function Results({ result, onBack }) {
                 .map((item, idx) => {
                   const isHarmful = item.impact?.toLowerCase() === 'harmful';
                   const isBeneficial = item.impact?.toLowerCase() === 'beneficial';
-                  const accent = isHarmful ? '#ba1a1a' : isBeneficial ? '#006c49' : '#6c7a71';
-                  const bg = isHarmful ? 'rgba(186,26,26,0.06)' : isBeneficial ? 'rgba(16,185,129,0.06)' : 'rgba(108,122,113,0.06)';
+                  const accent = isHarmful ? '#ba1a1a' : isBeneficial ? '#4B6F44' : '#6c7a71';
+                  const bg = isHarmful ? 'rgba(186,26,26,0.06)' : isBeneficial ? 'rgba(75, 111, 68,0.06)' : 'rgba(108,122,113,0.06)';
                   const Icon = isHarmful ? AlertTriangle : isBeneficial ? CheckCircle : Info;
 
                   return (
@@ -226,28 +335,8 @@ export default function Results({ result, onBack }) {
           </section>
         )}
 
-        {result.alternatives && result.alternatives.length > 0 && (
-          <section className="result-section">
-            <div className="result-section-heading is-alternative">
-              <TrendingUp size={16} />
-              <h3>Healthier Alternatives</h3>
-            </div>
-            <div className="result-section-list">
-              {result.alternatives.map((alt, idx) => (
-                <div key={idx} className="result-audit-card ns-card">
-                  <div className="result-accent-bar is-alternative" />
-                  <div className="result-audit-body">
-                    <p className="result-alt-name">{alt.name}</p>
-                    <p>{alt.reason}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
         <button onClick={onBack} className="result-primary-button result-bottom-button btn-primary">
-          Scan Another Product
+          {t('scan_another')}
         </button>
       </main>
     </div>

@@ -168,7 +168,9 @@ const initDb = async () => {
     await addColumnIfMissing('scans', 'alternatives', 'JSONB');
     await addColumnIfMissing('scans', 'side_effects', 'JSONB');
     await addColumnIfMissing('scans', 'food_database_flag', 'BOOLEAN DEFAULT false');
-    await addColumnIfMissing('scans', 'image_url', 'TEXT');
+    await addColumnIfMissing('scans', 'nutriments', 'JSONB');
+    await addColumnIfMissing('scans', 'raw_product_data', 'JSONB');
+    await addColumnIfMissing('scans', 'servings', 'REAL DEFAULT 1');
     await addColumnIfMissing('product_database', 'ingredients_analysis', 'JSONB');
     await addColumnIfMissing('product_database', 'nutriments', 'JSONB');
     await addColumnIfMissing('product_database', 'raw_product_data', 'JSONB');
@@ -222,12 +224,9 @@ const initDb = async () => {
   }
 };
 
-initDb();
-setInterval(refreshFoodDatabaseFlags, 2 * 60 * 1000);
-
 app.use(cors());
-app.use(express.json({ limit: '15mb' }));
-app.use(express.urlencoded({ limit: '15mb', extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Pass pool to routes
 app.use((req, res, next) => {
@@ -244,6 +243,19 @@ app.get('/', (req, res) => {
   res.send('FitScan API is running');
 });
 
-app.listen(PORT, () => {
+app.use((req, res) => {
+  console.error(`[404] ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
+});
+
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
+  try {
+    await initDb();
+    // Refresh flags on startup is already done inside initDb() line 216
+    // Just start the interval for subsequent refreshes
+    setInterval(refreshFoodDatabaseFlags, 5 * 60 * 1000);
+  } catch (error) {
+    console.error('Critical failure during server startup:', error);
+  }
 });

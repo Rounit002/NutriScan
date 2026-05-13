@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, History as HistoryIcon, Search, Scale } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const parseJsonField = (value, fallback) => {
   if (!value) return fallback;
@@ -16,6 +17,7 @@ export default function History({ authToken, onBack, onViewDetail }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const { t } = useTranslation();
 
   useEffect(() => {
     let isMounted = true;
@@ -62,6 +64,8 @@ export default function History({ authToken, onBack, onViewDetail }) {
 
   const handleScanClick = (scan) => {
     onViewDetail({
+      scanId: scan.id,
+      servings: scan.servings || 1,
       productName: scan.product_name || 'Product',
       brand: scan.brand || 'Unknown Brand',
       score: scan.score,
@@ -70,11 +74,16 @@ export default function History({ authToken, onBack, onViewDetail }) {
       ingredientsAnalysis: parseJsonField(scan.ingredients, []),
       alternatives: parseJsonField(scan.alternatives, []),
       sideEffects: parseJsonField(scan.side_effects, []),
+      image_url: scan.image_url,
+      barcode: scan.product_data?.barcode || scan.product_data?.code || '',
+      recorded_at: scan.created_at,
+      nutriments: scan.nutriments,
+      rawProductData: scan.raw_product_data || scan.product_data
     });
   };
 
   const scoreColor = (score) => {
-    if (score >= 8) return '#10B981';
+    if (score >= 8) return '#4B6F44';
     if (score >= 5) return '#fd761a';
     return '#ba1a1a';
   };
@@ -86,7 +95,7 @@ export default function History({ authToken, onBack, onViewDetail }) {
           <button type="button" onClick={onBack} aria-label="Back">
             <ArrowLeft size={20} />
           </button>
-          <h1>History</h1>
+          <h1>{t('history')}</h1>
           <span />
         </header>
 
@@ -96,7 +105,7 @@ export default function History({ authToken, onBack, onViewDetail }) {
             type="search"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search"
+            placeholder={t('search')}
             aria-label="Search history"
           />
         </div>
@@ -104,7 +113,7 @@ export default function History({ authToken, onBack, onViewDetail }) {
         {isLoading ? (
           <div className="history-state">
             <div className="history-spinner" />
-            <span>Loading history...</span>
+            <span>{t('loading_history')}</span>
           </div>
         ) : error ? (
           <div className="history-state is-error">
@@ -114,8 +123,8 @@ export default function History({ authToken, onBack, onViewDetail }) {
         ) : filteredScans.length === 0 ? (
           <div className="history-state">
             <HistoryIcon size={28} />
-            <strong>No history found</strong>
-            <span>{searchTerm ? 'Try a different search.' : 'Scan a product to create your first log.'}</span>
+            <strong>{t('no_history')}</strong>
+            <span>{searchTerm ? t('try_different_search') : t('scan_first_product')}</span>
           </div>
         ) : (
           <div className="history-list" aria-label="History entries">
@@ -123,13 +132,13 @@ export default function History({ authToken, onBack, onViewDetail }) {
               const recordedAt = scan.created_at ? new Date(scan.created_at) : null;
               const dateLabel = recordedAt && !Number.isNaN(recordedAt.getTime())
                 ? recordedAt.toLocaleString('en-IN', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                : 'Date unavailable';
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+                : t('date_unavailable');
               const color = scoreColor(scan.score);
 
               return (

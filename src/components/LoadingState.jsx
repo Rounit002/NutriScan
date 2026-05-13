@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Search, BrainCircuit, Activity, Sparkles, CheckCircle, Leaf } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export default function LoadingState() {
   const [step, setStep] = useState(0);
+  const { t } = useTranslation();
 
   const steps = [
-    { text: 'OCR Extraction',        icon: Search,      color: 'var(--ns-tertiary)' },
-    { text: 'Profile Matching',      icon: Activity,    color: 'var(--ns-secondary-con)' },
-    { text: 'Health Impact Analysis',icon: BrainCircuit,color: 'var(--ns-primary)' },
-    { text: 'Verdict Generation',    icon: Sparkles,    color: '#10B981' },
+    { text: t('ocr_extraction'),        icon: Search,      color: 'var(--ns-tertiary)' },
+    { text: t('profile_matching'),      icon: Activity,    color: 'var(--ns-secondary-con)' },
+    { text: t('health_impact'),icon: BrainCircuit,color: 'var(--ns-primary)' },
+    { text: t('verdict_generation'),    icon: Sparkles,    color: '#4B6F44' },
   ];
 
   useEffect(() => {
@@ -26,18 +28,18 @@ export default function LoadingState() {
 
       {/* Background blobs */}
       <div className="fixed top-0 right-0 w-72 h-72 rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.07) 0%, transparent 70%)' }} />
+        style={{ background: 'radial-gradient(circle, rgba(75, 111, 68,0.07) 0%, transparent 70%)' }} />
       <div className="fixed bottom-0 left-0 w-56 h-56 rounded-full pointer-events-none"
         style={{ background: 'radial-gradient(circle, rgba(35,172,241,0.06) 0%, transparent 70%)' }} />
 
       {/* Animated icon */}
       <div className="relative">
         <div className="absolute inset-0 rounded-full pointer-events-none"
-          style={{ background: 'rgba(16,185,129,0.12)', filter: 'blur(40px)', transform: 'scale(1.5)' }} />
+          style={{ background: 'rgba(75, 111, 68,0.12)', filter: 'blur(40px)', transform: 'scale(1.5)' }} />
         <div className="w-28 h-28 rounded-3xl flex items-center justify-center relative z-10 animate-float"
           style={{
-            background: 'linear-gradient(135deg,#006c49,#10B981)',
-            boxShadow: '0 16px 48px rgba(0,108,73,0.3)',
+            background: 'linear-gradient(135deg,#4B6F44,#4B6F44)',
+            boxShadow: '0 16px 48px rgba(75, 111, 68,0.3)',
           }}>
           <CurrentIcon size={52} color="white" />
         </div>
@@ -52,13 +54,13 @@ export default function LoadingState() {
       {/* Title */}
       <div className="text-center space-y-1.5">
         <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--font-headline)', color: 'var(--ns-on-surface)', letterSpacing: '-0.01em' }}>
-          Analyzing...
+          {t('analyzing')}
         </h2>
         <div className="flex items-center justify-center gap-1.5">
           <Leaf size={13} style={{ color: 'var(--ns-primary)' }} />
-          <p className="text-xs font-semibold" style={{ color: 'var(--ns-outline)' }}>NutriScan AI Processing</p>
+          <p className="text-xs font-semibold" style={{ color: 'var(--ns-outline)' }}>{t('ai_processing')}</p>
         </div>
-        <p className="text-xs" style={{ color: 'var(--ns-outline)', opacity: 0.6 }}>High demand may add a few seconds</p>
+        <p className="text-xs" style={{ color: 'var(--ns-outline)', opacity: 0.6 }}>{t('high_demand')}</p>
       </div>
 
       {/* Step list */}
@@ -71,11 +73,11 @@ export default function LoadingState() {
               style={{ opacity: isActive || isDone ? 1 : 0.35, transform: isActive ? 'scale(1.03)' : 'scale(1)', transformOrigin: 'left' }}>
               <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all"
                 style={{
-                  background: isDone ? 'rgba(16,185,129,0.12)' : isActive ? s.color + '18' : 'var(--ns-surface-con)',
-                  border: `1.5px solid ${isDone ? 'rgba(16,185,129,0.3)' : isActive ? s.color + '55' : 'var(--ns-outline-var)'}`,
+                  background: isDone ? 'rgba(75, 111, 68,0.12)' : isActive ? s.color + '18' : 'var(--ns-surface-con)',
+                  border: `1.5px solid ${isDone ? 'rgba(75, 111, 68,0.3)' : isActive ? s.color + '55' : 'var(--ns-outline-var)'}`,
                 }}>
                 {isDone
-                  ? <CheckCircle size={18} style={{ color: '#10B981' }} />
+                  ? <CheckCircle size={18} style={{ color: '#4B6F44' }} />
                   : <s.icon size={18} style={{ color: isActive ? s.color : 'var(--ns-outline)' }} className={isActive ? 'animate-pulse' : ''} />}
               </div>
               <div className="flex flex-col flex-1 min-w-0">

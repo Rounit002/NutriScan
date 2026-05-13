@@ -29,6 +29,8 @@ router.get('/', async (req, res) => {
         f.title, 
         f.description, 
         f.voters, 
+        f.status,
+        f.category,
         f.created_at, 
         u.name as author_name 
       FROM feature_requests f
@@ -64,7 +66,7 @@ router.get('/', async (req, res) => {
 // Create a new feature request
 router.post('/', authenticate, async (req, res) => {
   const pool = req.pool;
-  const { title, description } = req.body;
+  const { title, description, category } = req.body;
   const userId = req.userId; // Provided by authenticate middleware
   
   if (!title || !description) {
@@ -73,9 +75,9 @@ router.post('/', authenticate, async (req, res) => {
   
   try {
     const result = await pool.query(
-      `INSERT INTO feature_requests (user_id, title, description) 
-       VALUES ($1, $2, $3) RETURNING *`,
-      [userId, title, description]
+      `INSERT INTO feature_requests (user_id, title, description, category) 
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [userId, title, description, category || 'Feature']
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
