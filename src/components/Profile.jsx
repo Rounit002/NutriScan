@@ -149,9 +149,13 @@ const normalizeCondition = (condition) => {
 
 const profileLanguages = [
   { code: 'en', label: 'English' },
+  { code: 'fr', label: 'Français' },
+  { code: 'ar', label: 'عربي' },
+  { code: 'ur', label: 'اردو' },
+  { code: 'ne', label: 'नेपाली' },
   { code: 'hi', label: 'हिन्दी' },
-  { code: 'es', label: 'Español' },
   { code: 'de', label: 'Deutsch' },
+  { code: 'es', label: 'Español' },
 ];
 
 function ProfileSection({ title, children }) {
@@ -282,18 +286,20 @@ export function PersonalDetailsPage({
     setError('');
 
     try {
-      if (!authToken) throw new Error('Missing auth token');
-      const response = await fetch('http://localhost:5000/auth/details', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          name: field.key === 'name' ? draftValue : undefined,
-          profile: profilePatch,
-        }),
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/details`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            name: field.key === 'name' ? draftValue : undefined,
+            profile: profilePatch,
+          }),
+        }
+      );
 
       if (!response.ok) throw new Error('Save failed');
       const data = await response.json();
@@ -449,17 +455,19 @@ export function MedicalProfilePage({
     setError('');
 
     try {
-      if (!authToken) throw new Error('Missing auth token');
-      const response = await fetch('http://localhost:5000/auth/details', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          profile: { conditions: selectedIssues },
-        }),
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/details`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            profile: { conditions: selectedIssues },
+          }),
+        }
+      );
 
       if (!response.ok) throw new Error('Save failed');
       const data = await response.json();
@@ -617,17 +625,19 @@ export function HealthGoalsPage({
     setError('');
 
     try {
-      if (!authToken) throw new Error('Missing auth token');
-      const response = await fetch('http://localhost:5000/auth/details', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          profile: { goals: selectedGoals },
-        }),
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/details`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            profile: { goals: selectedGoals },
+          }),
+        }
+      );
 
       if (!response.ok) throw new Error('Save failed');
       const data = await response.json();
@@ -766,14 +776,17 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
         throw new Error('Razorpay SDK failed to load');
       }
 
-      const orderRes = await fetch('http://localhost:5000/api/payment/create-order', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}` 
-        },
-        body: JSON.stringify({ planType })
-      });
+      const orderRes = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/payment/create-order`,
+        {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({ planType })
+        }
+      );
       if (!orderRes.ok) throw new Error('Failed to create order');
       const order = await orderRes.json();
 
@@ -786,19 +799,22 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
         order_id: order.order_id,
         handler: async function (response) {
           try {
-            const verifyRes = await fetch('http://localhost:5000/api/payment/verify', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${authToken}`
-              },
-              body: JSON.stringify({
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature,
-                planType
-              })
-            });
+            const verifyRes = await fetch(
+              `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/payment/verify`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_signature: response.razorpay_signature,
+                  planType
+                })
+              }
+            );
             if (verifyRes.ok) {
               alert(`Payment successful! Welcome to the ${planType === 'family' ? 'Family' : 'Basic'} Plan.`);
               setModal(null);
@@ -860,11 +876,13 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
     setIsDeleting(true);
     setDeleteError('');
     try {
-      if (!authToken) throw new Error('Not authenticated');
-      const response = await fetch('http://localhost:5000/auth/account', {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/account`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        }
+      );
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(body.error || 'Deletion failed');
@@ -887,11 +905,13 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
   const handleCancelDeletion = async () => {
     setIsCancellingDeletion(true);
     try {
-      if (!authToken) throw new Error('Not authenticated');
-      const response = await fetch('http://localhost:5000/auth/cancel-deletion', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/cancel-deletion`,
+        {
+          method: 'POST',
+          credentials: 'include',
+        }
+      );
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body.error || 'Cancel failed');
@@ -923,18 +943,20 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
       setPhotoError('');
 
       try {
-        if (!authToken) throw new Error('Missing auth token');
         const compressedImage = await compressProfileImage(file);
         console.log('[Profile photo upload] compressed image size:', compressedImage.length);
 
-        const response = await fetch('http://localhost:5000/auth/profile-picture', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: JSON.stringify({ imageBase64: compressedImage }),
-        });
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/profile-picture`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify({ imageBase64: compressedImage }),
+          }
+        );
 
         if (!response.ok) {
           const errorBody = await response.json().catch(() => ({}));

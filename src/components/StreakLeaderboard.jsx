@@ -47,23 +47,13 @@ export default function StreakLeaderboard({ authToken, userAuth, onBack }) {
     let isMounted = true;
 
     const loadStreakPage = async () => {
-      if (!authToken) {
-        setIsLoading(false);
-        setError(t('sign_in_streak'));
-        return;
-      }
-
       setIsLoading(true);
       setError(null);
 
       try {
         const [streakResponse, leaderboardResponse] = await Promise.all([
-          fetch('http://localhost:5000/auth/streak', {
-            headers: { Authorization: `Bearer ${authToken}` },
-          }),
-          fetch('http://localhost:5000/auth/leaderboard', {
-            headers: { Authorization: `Bearer ${authToken}` },
-          }),
+          fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/streak`, { credentials: 'include' }),
+          fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/leaderboard`, { credentials: 'include' }),
         ]);
 
         if (!streakResponse.ok || !leaderboardResponse.ok) {
@@ -93,7 +83,7 @@ export default function StreakLeaderboard({ authToken, userAuth, onBack }) {
     return () => {
       isMounted = false;
     };
-  }, [authToken]);
+  }, []);
 
   const rankedPlayers = useMemo(() => {
     if (leaderboard.length) return leaderboard.slice(0, 10);

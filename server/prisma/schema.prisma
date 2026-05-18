@@ -9,8 +9,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
 }
 
 model User {
@@ -21,6 +20,10 @@ model User {
   name          String?
   createdAt     DateTime @default(now())
   scans         Scan[]
+  scansUsed     Int      @default(0)
+  scanLimit     Int      @default(20)
+  plan          String   @default("free")
+  planExpiresAt DateTime?
 }
 
 model Scan {

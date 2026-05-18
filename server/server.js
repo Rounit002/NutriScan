@@ -1,6 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const helmet = require('helmet');
+const { analyzeLimiter, authLimiter } = require('./middleware/rateLimiter');
 const { Pool } = require('pg');
 
 const authRoutes = require('./routes/auth');
@@ -8,9 +11,16 @@ const scansRoutes = require('./routes/scans');
 const analyzeRoutes = require('./routes/analyze');
 const featuresRoutes = require('./routes/features');
 const paymentRoutes = require('./routes/payment');
+const userRoutes = require('./routes/user');
+
+// Initialize Async Job Queue Worker
+require('./config/worker');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Enable Helmet to secure Express app by setting various HTTP headers
+app.use(helmet());
 
 // Setup PostgreSQL connection pool with discrete credentials
 const pool = new Pool({
@@ -180,6 +190,7 @@ const initDb = async () => {
     await addColumnIfMissing('product_database', 'first_scanned_by', 'INTEGER REFERENCES users(id) ON DELETE SET NULL');
     await addColumnIfMissing('product_database', 'last_scanned_by', 'INTEGER REFERENCES users(id) ON DELETE SET NULL');
     await addColumnIfMissing('product_database', 'updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
+    await addColumnIfMissing('product_database', 'translations', "JSONB DEFAULT '{}'::jsonb");
     await addColumnIfMissing('users', 'points', 'INTEGER DEFAULT 0');
     await addColumnIfMissing('users', 'streak', 'INTEGER DEFAULT 0');
     await addColumnIfMissing('users', 'last_login_at', 'TIMESTAMP');
@@ -189,6 +200,10 @@ const initDb = async () => {
     await addColumnIfMissing('users', 'subscription_expires_at', 'TIMESTAMP');
     await addColumnIfMissing('users', 'image_scans_used', 'INTEGER DEFAULT 0');
     await addColumnIfMissing('users', 'subscription_plan', "VARCHAR(50)");
+    await addColumnIfMissing('users', 'scans_used', 'INTEGER DEFAULT 0');
+    await addColumnIfMissing('users', 'scan_limit', 'INTEGER DEFAULT 20');
+    await addColumnIfMissing('users', 'plan', "VARCHAR(50) DEFAULT 'free'");
+    await addColumnIfMissing('users', 'plan_expires_at', 'TIMESTAMP');
     await addColumnIfMissing('user_medical_conditions', 'severity', "VARCHAR(20) NOT NULL DEFAULT 'Medium'");
     await addColumnIfMissing('user_medical_conditions', 'updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 
@@ -223,6 +238,30 @@ const initDb = async () => {
     `);
 
     await refreshFoodDatabaseFlags();
+
+    // Enable pg_trgm extension for fuzzy and substring search optimizations
+    await pool.query('CREATE EXTENSION IF NOT EXISTS pg_trgm;');
+
+    // Trigram GIN indexes for fast ILIKE '%search%' queries in shared database lookups
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_scans_product_name_trgm ON scans USING gin (product_name gin_trgm_ops);');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_scans_brand_trgm ON scans USING gin (brand gin_trgm_ops);');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_scans_ingredients_trgm ON scans USING gin (ingredients gin_trgm_ops);');
+
+    // Expression B-Tree index for highly-optimized LEFT JOIN performance in scan history
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_scans_product_key_expr ON scans (
+        (LOWER(COALESCE(brand, 'unknown')) || '::' || LOWER(TRIM(COALESCE(product_name, ''))))
+      );
+    `);
+
+    // B-Tree index for quick user scan history retrieval
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_scans_user_id ON scans (user_id);');
+
+    // Partial index for fast retrieval of products shared in the global food database
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_scans_food_db_flag ON scans (food_database_flag) WHERE food_database_flag = true;');
+
+    // B-Tree index for fast user reference lookups in feature requests
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_feature_requests_user_id ON feature_requests (user_id);');
 
     console.log('Database tables initialized successfully');
   } catch (err) {
@@ -264,9 +303,14 @@ const purgeScheduledDeletions = async () => {
   }
 };
 
-app.use(cors());
+// Allow cookies to be sent cross-origin from the Vite dev server / production domain
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true, // required for HttpOnly cookies
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(cookieParser()); // must come before routes so req.cookies is populated
 
 // Pass pool to routes
 app.use((req, res, next) => {
@@ -274,9 +318,10 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/auth', authRoutes);
+app.use('/auth', authLimiter, authRoutes);
 app.use('/scans', scansRoutes);
-app.use('/api/analyze', analyzeRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/analyze', analyzeLimiter, analyzeRoutes.router);
 app.use('/features', featuresRoutes);
 app.use('/api/payment', paymentRoutes);
 
@@ -303,3 +348,5 @@ app.listen(PORT, async () => {
     console.error('Critical failure during server startup:', error);
   }
 });
+
+module.exports = { pool };

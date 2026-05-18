@@ -123,16 +123,17 @@ export default function Results({ result, onBack, authToken, onServingsChanged }
       setIsEditingServings(false);
 
       // Persist to backend if we have a scan ID
-      if (authToken && result.scanId) {
+      if (result.scanId) {
         try {
-          const response = await fetch(`http://localhost:5000/scans/${result.scanId}/servings`, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${authToken}`,
-            },
-            body: JSON.stringify({ servings: newServings }),
-          });
+          const response = await fetch(
+            `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/scans/${result.scanId}/servings`,
+            {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ servings: newServings }),
+            }
+          );
           if (!response.ok) throw new Error('Failed to save servings');
           onServingsChanged?.(result.scanId, newServings);
         } catch (err) {

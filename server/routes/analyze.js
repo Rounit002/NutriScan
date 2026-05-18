@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const authenticate = require('../middleware/auth');
+const { validateBody, imageAnalysisSchema, textAnalysisSchema } = require('../middleware/validator');
+const requirePlan = require('../middleware/requirePlan');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
@@ -252,56 +255,29 @@ function normalizeResult(result) {
   return result;
 }
 
-// POST /api/analyze/image
-router.post('/image', async (req, res) => {
-  const { imageBase64, userProfile } = req.body;
-  
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    return res.status(401).json({ error: 'Authentication required for image scanning.' });
-  }
+const { addAnalysisJob, getJobStatus } = require('../config/queue');
 
-  const token = authHeader.split(' ')[1];
-  let userId;
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    userId = decoded.userId;
-  } catch (err) {
-    return res.status(401).json({ error: 'Invalid token.' });
-  }
-
-  // Check subscription limits
-  try {
-    const userRes = await req.pool.query(
-      'SELECT is_premium, subscription_plan, subscription_expires_at, image_scans_used FROM users WHERE id = $1',
-      [userId]
-    );
-    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    
-    const user = userRes.rows[0];
-    if (!user.is_premium) {
-      return res.status(403).json({ error: 'Image scanning requires an active subscription.' });
-    }
-    if (!user.subscription_expires_at || new Date(user.subscription_expires_at) < new Date()) {
-      return res.status(403).json({ error: 'Your subscription has expired. Please renew.' });
-    }
-    // Only basic plan has the 20 limit
-    if (user.subscription_plan === 'basic' && user.image_scans_used >= 20) {
-      return res.status(403).json({ error: 'You have reached the 20 image scan limit for your Basic plan. Please renew.' });
-    }
-  } catch (err) {
-    console.error('Error checking subscription:', err);
-    return res.status(500).json({ error: 'Database error checking subscription.' });
-  }
-
+// Core task processor for Image Analysis — executed in the background worker
+async function processImageAnalysis({ imageBase64, userProfile, userId, lang = 'en' }) {
   const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey) return res.status(500).json({ error: 'Gemini API key not configured on server.' });
-  if (!imageBase64) return res.status(400).json({ error: 'imageBase64 is required.' });
+  if (!apiKey) throw new Error('Gemini API key not configured on server.');
+  if (!imageBase64) throw new Error('imageBase64 is required.');
 
   const base64Data = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
   const mimeMatch = imageBase64.match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+).*,.*/);
   const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+
+  const languageNames = {
+    en: 'English',
+    ar: 'Arabic',
+    fr: 'French',
+    ur: 'Urdu',
+    ne: 'Nepali',
+    hi: 'Hindi',
+    de: 'German',
+    es: 'Spanish',
+  };
+  const targetLanguage = languageNames[lang] || 'English';
 
   const prompt = `You are "Nutri Scan", a brutally honest nutrition analyst for the Indian health market.
 Analyze this packaged food product image for a user with:
@@ -321,6 +297,9 @@ Examples:
 - "Bad: Excess added sugar"
 
 CRITICAL: "sideEffects" must be an array of 2-4 possible side effects or health risks from consuming this product, based on the user's health profile and the ingredients. If none, return an empty array.
+
+CRITICAL LANGUAGE CONSTRAINT: You MUST return all the text values in the JSON (brand, productName, verdict, sideEffects, ingredientsAnalysis's reason, alternatives's name and reason) translated into this target language: ${targetLanguage}.
+Keep all structural JSON keys (brand, productName, score, nutrition, verdict, sideEffects, ingredientsAnalysis, name, impact, reason, alternatives) strictly in English. Use clear, natural, and simple language for the translation.
 
 Respond ONLY with valid JSON, no markdown:
 {
@@ -355,29 +334,35 @@ Respond ONLY with valid JSON, no markdown:
     generationConfig: { temperature: 0.4, maxOutputTokens: 2048 }
   };
 
-  try {
-    const text = await generateWithFallback(apiKey, geminiBody);
-    const result = parseResponse(text);
+  const text = await generateWithFallback(apiKey, geminiBody);
+  const result = parseResponse(text);
 
-    // Increment scan count
-    await req.pool.query(
-      'UPDATE users SET image_scans_used = COALESCE(image_scans_used, 0) + 1 WHERE id = $1',
-      [userId]
-    );
+  // Increment scan count in database
+  const { pool } = require('../server');
+  await pool.query(
+    'UPDATE users SET image_scans_used = COALESCE(image_scans_used, 0) + 1, scans_used = COALESCE(scans_used, 0) + 1 WHERE id = $1',
+    [userId]
+  );
 
-    res.json(result);
-  } catch (err) {
-    console.error('[FitScan AI] Final error:', err.message);
-    res.status(503).json({ error: 'AI analysis temporarily unavailable. Please try again in a moment.', details: err.message });
-  }
-});
+  return result;
+}
 
-// POST /api/analyze/text
-router.post('/text', async (req, res) => {
-  const { productData, userProfile } = req.body;
+// Core task processor for Text Analysis — executed in the background worker
+async function processTextAnalysis({ productData, userProfile, userId, lang = 'en' }) {
   const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('Gemini API key not configured on server.');
 
-  if (!apiKey) return res.status(500).json({ error: 'Gemini API key not configured on server.' });
+  const languageNames = {
+    en: 'English',
+    ar: 'Arabic',
+    fr: 'French',
+    ur: 'Urdu',
+    ne: 'Nepali',
+    hi: 'Hindi',
+    de: 'German',
+    es: 'Spanish',
+  };
+  const targetLanguage = languageNames[lang] || 'English';
 
   const prompt = `You are "FitScan", a brutally honest nutrition analyst for the Indian health market.
 Analyze this product for a user with:
@@ -403,6 +388,9 @@ Examples:
 
 CRITICAL: "sideEffects" must be an array of 2-4 possible side effects or health risks from consuming this product, based on the user's health profile and the ingredients. If none, return an empty array.
 
+CRITICAL LANGUAGE CONSTRAINT: You MUST return all the text values in the JSON (brand, productName, verdict, sideEffects, ingredientsAnalysis's reason, alternatives's name and reason) translated into this target language: ${targetLanguage}.
+Keep all structural JSON keys (brand, productName, score, verdict, sideEffects, ingredientsAnalysis, name, impact, reason, alternatives) strictly in English. Use clear, natural, and simple language for the translation.
+
 Respond ONLY with valid JSON, no markdown:
 {
   "brand": "${productData.brands || 'Unknown'}",
@@ -423,14 +411,150 @@ Respond ONLY with valid JSON, no markdown:
     generationConfig: { temperature: 0.4, maxOutputTokens: 2048 }
   };
 
+  const text = await generateWithFallback(apiKey, geminiBody);
+  const result = parseResponse(text);
+
+  // Increment scan count in database if user is authenticated
+  if (userId) {
+    const { pool } = require('../server');
+    await pool.query(
+      'UPDATE users SET scans_used = COALESCE(scans_used, 0) + 1 WHERE id = $1',
+      [userId]
+    );
+  }
+  return result;
+}
+
+// Quota checking helper
+const checkQuota = async (pool, userId) => {
+  const userRes = await pool.query(
+    'SELECT plan, plan_expires_at, scans_used, scan_limit FROM users WHERE id = $1',
+    [userId]
+  );
+  if (userRes.rows.length === 0) {
+    throw { status: 404, message: 'User not found' };
+  }
+  let user = userRes.rows[0];
+
+  // Auto downgrade expired plan
+  if (user.plan_expires_at && new Date(user.plan_expires_at) < new Date()) {
+    console.log(`Plan expired for user ${userId}, downgrading to free...`);
+    await pool.query(
+      "UPDATE users SET plan = 'free', scan_limit = 20, is_premium = false WHERE id = $1",
+      [userId]
+    );
+    // Refresh user state
+    const refreshedRes = await pool.query(
+      'SELECT plan, plan_expires_at, scans_used, scan_limit FROM users WHERE id = $1',
+      [userId]
+    );
+    user = refreshedRes.rows[0];
+  }
+
+  const scans_used = user.scans_used ?? 0;
+  const scan_limit = user.scan_limit ?? 20;
+
+  if (scans_used >= scan_limit) {
+    throw { status: 403, message: 'Scan limit reached. Please upgrade your plan.' };
+  }
+
+  return user;
+};
+
+// POST /api/analyze/image
+router.post('/image', authenticate, validateBody(imageAnalysisSchema), requirePlan(['basic', 'pro', 'premium', 'family']), async (req, res) => {
+  const { imageBase64, userProfile, lang } = req.body;
+  const userId = req.userId;
+  const targetLang = lang || req.headers['accept-language'] || 'en';
+
   try {
-    const text = await generateWithFallback(apiKey, geminiBody);
-    const result = parseResponse(text);
-    res.json(result);
+    await checkQuota(req.pool, userId);
+  } catch (quotaErr) {
+    if (quotaErr.status) {
+      return res.status(quotaErr.status).json({ error: quotaErr.message });
+    }
+    console.error('Error checking quota:', quotaErr);
+    return res.status(500).json({ error: 'Database error checking quota.' });
+  }
+
+  try {
+    const jobInfo = await addAnalysisJob('analyzeImage', { imageBase64, userProfile, userId, lang: targetLang });
+    res.json(jobInfo);
   } catch (err) {
-    console.error('[FitScan AI] Final error:', err.message);
-    res.status(503).json({ error: 'AI analysis temporarily unavailable. Please try again in a moment.', details: err.message });
+    console.error('[FitScan AI] Enqueue error:', err.message);
+    res.status(500).json({ error: 'Failed to queue scanning job.', details: err.message });
   }
 });
 
-module.exports = router;
+// POST /api/analyze/text
+router.post('/text', authenticate, validateBody(textAnalysisSchema), async (req, res) => {
+  const { productData, userProfile, lang } = req.body;
+  const userId = req.userId;
+  const targetLang = lang || req.headers['accept-language'] || 'en';
+
+  try {
+    await checkQuota(req.pool, userId);
+  } catch (quotaErr) {
+    if (quotaErr.status) {
+      return res.status(quotaErr.status).json({ error: quotaErr.message });
+    }
+    console.error('Error checking quota:', quotaErr);
+    return res.status(500).json({ error: 'Database error checking quota.' });
+  }
+
+  // ── Database Translation Cache Layer ──
+  try {
+    const productKey = `${(productData.brands || 'unknown').trim().toLowerCase()}::${(productData.product_name || '').trim().toLowerCase()}`;
+    const cachedProductRes = await req.pool.query(
+      'SELECT translations FROM product_database WHERE product_key = $1',
+      [productKey]
+    );
+
+    if (cachedProductRes.rows.length > 0) {
+      const dbProduct = cachedProductRes.rows[0];
+      const translations = dbProduct.translations || {};
+
+      if (translations[targetLang]) {
+        console.log(`[Cache Hit] Serving cached translations for language "${targetLang}" from product_database for key: ${productKey}`);
+        
+        const cachedResult = translations[targetLang];
+        
+        // Register a pre-completed background job directly into the status store
+        const { addPreCompletedJob } = require('../config/queue');
+        const jobInfo = addPreCompletedJob(cachedResult);
+        return res.json(jobInfo);
+      }
+    }
+  } catch (cacheErr) {
+    console.warn('[Cache Layer] Failed to retrieve or serve from cache:', cacheErr.message);
+  }
+
+  try {
+    const jobInfo = await addAnalysisJob('analyzeText', { productData, userProfile, userId, lang: targetLang });
+    res.json(jobInfo);
+  } catch (err) {
+    console.error('[FitScan AI] Enqueue error:', err.message);
+    res.status(500).json({ error: 'Failed to queue analysis job.', details: err.message });
+  }
+});
+
+// GET /api/analyze/status/:jobId
+router.get('/status/:jobId', async (req, res) => {
+  const { jobId } = req.params;
+  try {
+    const statusInfo = await getJobStatus(jobId);
+    if (!statusInfo) {
+      return res.status(404).json({ error: 'Job not found.' });
+    }
+    res.json(statusInfo);
+  } catch (err) {
+    console.error('[FitScan AI] Status retrieval error:', err.message);
+    res.status(500).json({ error: 'Failed to retrieve analysis status.', details: err.message });
+  }
+});
+
+module.exports = {
+  router,
+  processImageAnalysis,
+  processTextAnalysis,
+};

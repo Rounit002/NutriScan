@@ -49,9 +49,10 @@ export default function FeatureRequests({ userAuth, authToken, onBack }) {
   const fetchFeatures = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/features', {
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/features`,
+        { credentials: 'include' }
+      );
       if (!response.ok) throw new Error('Failed to fetch features');
       const data = await response.json();
       setFeatures(data);
@@ -82,14 +83,15 @@ export default function FeatureRequests({ userAuth, authToken, onBack }) {
     }));
 
     try {
-      await fetch(`http://localhost:5000/features/${featureId}/vote`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify({ vote: newVote })
-      });
+      await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/features/${featureId}/vote`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ vote: newVote })
+        }
+      );
     } catch (err) {
       console.error('Failed to vote:', err);
       fetchFeatures();
@@ -102,18 +104,19 @@ export default function FeatureRequests({ userAuth, authToken, onBack }) {
 
     setSubmitting(true);
     try {
-      const response = await fetch('http://localhost:5000/features', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify({
-          title: newTitle,
-          description: newDescription,
-          category: newCategory
-        })
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/features`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            title: newTitle,
+            description: newDescription,
+            category: newCategory
+          })
+        }
+      );
 
       if (!response.ok) throw new Error('Failed to create feature');
 

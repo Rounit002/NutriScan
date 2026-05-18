@@ -16,17 +16,174 @@ import FoodDatabase from './components/FoodDatabase';
 import Trends from './components/Trends';
 import { analyzeFoodImage, analyzeFoodText } from './geminiService';
 import { useTheme } from './components/ThemeToggle';
+import { useTranslation } from 'react-i18next';
+import {
+  Activity,
+  Apple,
+  BarChart2,
+  Bell,
+  Camera,
+  Database,
+  History as HistoryIcon,
+  Home as HomeIcon,
+  LogOut,
+  Search,
+  Trophy,
+  User,
+} from 'lucide-react';
+
+const shellTitles = {
+  dashboard: 'home',
+  home: 'scan_product',
+  barcode: 'barcode',
+  history: 'history',
+  compare: 'compare_title',
+  foodDatabase: 'food_db_title',
+  trends: 'health_progress',
+  streak: 'leaderboard',
+  profile: 'profile',
+  features: 'feature_requests',
+  results: 'nutrition_analysis',
+};
+
+const shellNavigation = [
+  { view: 'dashboard', translationKey: 'home', icon: HomeIcon },
+  { view: 'home', translationKey: 'scan', icon: Camera },
+  { view: 'history', translationKey: 'history', icon: HistoryIcon },
+  { view: 'compare', translationKey: 'compare', icon: BarChart2 },
+  { view: 'foodDatabase', translationKey: 'food_db_title', icon: Database },
+  { view: 'trends', translationKey: 'health_progress', icon: Activity },
+  { view: 'streak', translationKey: 'leaderboard', icon: Trophy },
+  { view: 'profile', translationKey: 'profile', icon: User },
+];
+
+function DesktopAppShell({ children, currentView, userAuth, userProfile, onNavigate, onLogout }) {
+  const { t } = useTranslation();
+  const displayName = userAuth?.name || userProfile?.name || 'FitScan User';
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'FS';
+  const quotaUsed = Number(userAuth?.scansUsed ?? userAuth?.scanCount ?? userAuth?.scans_used ?? 0);
+  const quotaLimit = userAuth?.isPremium ? '∞' : Number(userAuth?.scanLimit ?? userAuth?.scan_limit ?? 20);
+  const quotaPercent = userAuth?.isPremium ? 100 : Math.max(0, Math.min((quotaUsed / quotaLimit) * 100, 100));
+
+  return (
+    <div className="fitscan-app-shell lg:flex">
+      <aside className="fitscan-app-sidebar hidden lg:flex" aria-label="Desktop navigation">
+        <div className="fitscan-app-brand">
+          <span className="fitscan-app-brand-mark"><Apple size={20} /></span>
+          <strong>Fit<span>Scan</span></strong>
+        </div>
+
+        <nav className="fitscan-app-sidebar-nav">
+          {shellNavigation.map(({ view, translationKey, icon: Icon }) => (
+            <button
+              key={view}
+              type="button"
+              className={`sidebar-nav-link${currentView === view ? ' active' : ''}`}
+              onClick={() => onNavigate(view)}
+            >
+              <Icon size={20} />
+              <span>{t(translationKey)}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="fitscan-app-user-card">
+          <div className="fitscan-app-user-row">
+            <span className="fitscan-app-avatar">{initials}</span>
+            <span>
+              <strong>{displayName}</strong>
+              <em>{userAuth?.isPremium ? t('premium_plan', 'Premium plan') : t('free_plan', 'Free plan')}</em>
+            </span>
+          </div>
+          <div className="fitscan-app-quota">
+            <span>
+              {userAuth?.isPremium 
+                ? t('unlimited_scans', 'Unlimited scans') 
+                : t('quota_scans', '{{used}} / {{limit}} scans', { used: quotaUsed, limit: quotaLimit })
+              }
+            </span>
+            <i><b style={{ width: `${quotaPercent}%` }} /></i>
+          </div>
+          {!userAuth?.isPremium && (
+            <button type="button" className="fitscan-app-upgrade" onClick={() => onNavigate('profile')}>
+              {t('upgrade')}
+            </button>
+          )}
+          <button type="button" className="fitscan-app-logout" onClick={onLogout}>
+            <LogOut size={16} />
+            <span>{t('logout')}</span>
+          </button>
+        </div>
+      </aside>
+
+      <div className="fitscan-app-content">
+        <header className="top-header hidden lg:flex">
+          <div className="fitscan-app-title">
+            <span>{t(shellTitles[currentView]) || 'FitScan'}</span>
+          </div>
+          <div className="fitscan-header-quota" aria-label="Scan quota">
+            <Search size={15} />
+            <span>
+              {userAuth?.isPremium 
+                ? t('unlimited_scans', 'Unlimited scans') 
+                : t('quota_scans_compact', '{{used}}/{{limit}} scans', { used: quotaUsed, limit: quotaLimit })
+              }
+            </span>
+            <i><b style={{ width: `${quotaPercent}%` }} /></i>
+          </div>
+          <div className="fitscan-header-actions">
+            <button type="button" aria-label="Notifications"><Bell size={18} /></button>
+            <button type="button" className="fitscan-header-avatar" onClick={() => onNavigate('profile')}>
+              {initials}
+            </button>
+          </div>
+        </header>
+
+        <main className="fitscan-app-main">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
+  const { t, i18n } = useTranslation();
   const { isDark, toggle: toggleTheme } = useTheme();
-  // If a token exists, start in 'restoring' state instead of 'login' to avoid flash
-  const hasToken = Boolean(localStorage.getItem('nutriscan_token'));
-  const [currentView, setCurrentView] = useState(hasToken ? 'restoring' : 'login');
+
+  // Manage RTL/LTR document direction and lang attributes
+  useEffect(() => {
+    const handleLanguageChange = (lng) => {
+      const isRtl = lng === 'ar' || lng === 'ur';
+      document.documentElement.dir = isRtl ? 'rtl' : 'ltr';
+      document.documentElement.lang = lng;
+      if (isRtl) {
+        document.documentElement.classList.add('rtl');
+      } else {
+        document.documentElement.classList.remove('rtl');
+      }
+    };
+
+    i18n.on('languageChanged', handleLanguageChange);
+    handleLanguageChange(i18n.resolvedLanguage || i18n.language || 'en');
+
+    return () => {
+      i18n.off('languageChanged', handleLanguageChange);
+    };
+  }, [i18n]);
+
+  // With HttpOnly cookies, we can't check token from JS.
+  // Start in 'restoring' to silently validate the session via /auth/me.
+  const [currentView, setCurrentView] = useState('restoring');
   const [userAuth, setUserAuth] = useState(null);
-  const [authToken, setToken] = useState(() => {
-    const saved = localStorage.getItem('nutriscan_token');
-    return saved && saved !== "undefined" ? saved : null;
-  });
+  // authToken is kept as null — the actual JWT lives in the HttpOnly cookie.
+  // It's passed as a prop to child components for legacy compatibility but is unused for auth.
+  const [authToken] = useState(null);
   const [userProfile, setUserProfile] = useState(() => {
     try {
       const saved = localStorage.getItem('nutriscan_profile');
@@ -38,19 +195,25 @@ export default function App() {
   const [analysisResult, setAnalysisResult] = useState(null);
   const [error, setError] = useState(null);
   const [pendingSignUp, setPendingSignUp] = useState(null);
-  useEffect(() => {
-    if (authToken && !userAuth) {
-      fetchUserData();
-    } else if (!authToken && currentView !== 'signup') {
-      setCurrentView('login');
-    }
-  }, [authToken]);
 
-  const fetchUserData = async () => {
+  useEffect(() => {
+    const updateHeaderShadow = () => {
+      document
+        .querySelectorAll('.top-header')
+        .forEach((header) => header.classList.toggle('scrolled', window.scrollY > 10));
+    };
+
+    updateHeaderShadow();
+    window.addEventListener('scroll', updateHeaderShadow, { passive: true });
+    return () => window.removeEventListener('scroll', updateHeaderShadow);
+  }, []);
+
+  async function fetchUserData() {
     try {
-      const response = await fetch('http://localhost:5000/auth/me', {
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/me`,
+        { credentials: 'include' }  // sends the HttpOnly cookie automatically
+      );
       if (response.ok) {
         const data = await response.json();
         setUserAuth(data.user);
@@ -58,19 +221,27 @@ export default function App() {
         localStorage.setItem('nutriscan_profile', JSON.stringify(data.user.profile));
         setCurrentView(data.user.profile ? 'dashboard' : 'onboarding');
       } else {
-        handleLogout();
+        // No valid cookie — show login
+        setCurrentView('login');
       }
     } catch (err) {
       console.error('Failed to fetch user data:', err);
-      handleLogout();
+      setCurrentView('login');
     }
-  };
+  }
 
-  const handleLogin = (user, token, deletionCancelled = false) => {
+  // On mount, silently check if a valid session cookie exists
+  useEffect(() => {
+    const restoreTimer = window.setTimeout(() => {
+      fetchUserData();
+    }, 0);
+    return () => window.clearTimeout(restoreTimer);
+  }, []);
+
+  const handleLogin = (user, _token, deletionCancelled = false) => {
+    // _token is ignored — the JWT now lives in the HttpOnly cookie set by the server
     setUserAuth(user);
-    setToken(token);
     setUserProfile(user.profile);
-    localStorage.setItem('nutriscan_token', token);
     localStorage.setItem('nutriscan_profile', JSON.stringify(user.profile));
     setCurrentView(user.profile ? 'dashboard' : 'onboarding');
 
@@ -81,12 +252,19 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
-    setToken(null);
+  const handleLogout = async () => {
+    // Tell the server to clear the HttpOnly cookie
+    try {
+      await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/logout`,
+        { method: 'POST', credentials: 'include' }
+      );
+    } catch {
+      // If the request fails, the cookie will still expire naturally
+    }
     setUserAuth(null);
     setUserProfile(null);
     setPendingSignUp(null);
-    localStorage.removeItem('nutriscan_token');
     localStorage.removeItem('nutriscan_profile');
     setCurrentView('login');
   };
@@ -100,29 +278,28 @@ export default function App() {
     setUserProfile(profile);
     localStorage.setItem('nutriscan_profile', JSON.stringify(profile));
 
-    if (authToken) {
-      try {
-        await fetch('http://localhost:5000/auth/profile', {
+    try {
+      await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/profile`,
+        {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ profile })
-        });
-      } catch (err) {
-        console.error('Failed to save profile to server:', err);
-      }
+        }
+      );
+    } catch (err) {
+      console.error('Failed to save profile to server:', err);
     }
     setCurrentView('dashboard');
   };
 
   const refreshStreak = async () => {
-    if (!authToken) return;
     try {
-      const response = await fetch('http://localhost:5000/auth/me', {
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/me`,
+        { credentials: 'include' }
+      );
       if (response.ok) {
         const data = await response.json();
         setUserAuth(data.user);
@@ -130,12 +307,6 @@ export default function App() {
     } catch (err) {
       console.error('Failed to refresh streak:', err);
     }
-  };
-
-  const handleResetProfile = () => {
-    setUserProfile(null);
-    localStorage.removeItem('nutriscan_profile');
-    setCurrentView('onboarding');
   };
 
   const handleUserDetailsUpdated = (updatedUser) => {
@@ -153,14 +324,13 @@ export default function App() {
       setAnalysisResult(result);
       setCurrentView('results');
 
-      if (authToken) {
-        // Send the full imageBase64 for Cloudinary storage
-        const saveResponse = await fetch('http://localhost:5000/scans', {
+      // Send the full imageBase64 for Cloudinary storage
+      const saveResponse = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/scans`,
+        {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             productName: result.productName,
             brand: result.brand,
@@ -170,7 +340,7 @@ export default function App() {
             ingredients: JSON.stringify(result.ingredientsAnalysis),
             alternatives: result.alternatives,
             sideEffects: result.sideEffects,
-            imageUrl: imageBase64, // Use full image for Cloudinary
+            imageUrl: imageBase64,
             productData: {
               product_name: result.productName,
               brands: result.brand,
@@ -180,13 +350,13 @@ export default function App() {
               nutriments: result.nutriments || result.nutrition || null
             }
           })
-        });
-        if (saveResponse.ok) {
-          const savedScan = await saveResponse.json();
-          setAnalysisResult(prev => prev ? { ...prev, scanId: savedScan.id, servings: savedScan.servings || 1 } : prev);
         }
-        refreshStreak();
+      );
+      if (saveResponse.ok) {
+        const savedScan = await saveResponse.json();
+        setAnalysisResult(prev => prev ? { ...prev, scanId: savedScan.id, servings: savedScan.servings || 1 } : prev);
       }
+      refreshStreak();
     } catch (err) {
       console.error(err);
       setError(err.message || "Analysis failed. Gemini might be busy. Try again!");
@@ -218,13 +388,12 @@ export default function App() {
         setAnalysisResult(enrichedResult);
         setCurrentView('results');
 
-        if (authToken) {
-          const saveResponse = await fetch('http://localhost:5000/scans', {
+        const saveResponse = await fetch(
+          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/scans`,
+          {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${authToken}`
-            },
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({
               productName: enrichedResult.productName,
               brand: enrichedResult.brand,
@@ -237,13 +406,13 @@ export default function App() {
               imageUrl: productImageUrl,
               productData: data.product
             })
-          });
-          if (saveResponse.ok) {
-            const savedScan = await saveResponse.json();
-            setAnalysisResult(prev => prev ? { ...prev, scanId: savedScan.id, servings: savedScan.servings || 1 } : prev);
           }
-          refreshStreak();
+        );
+        if (saveResponse.ok) {
+          const savedScan = await saveResponse.json();
+          setAnalysisResult(prev => prev ? { ...prev, scanId: savedScan.id, servings: savedScan.servings || 1 } : prev);
         }
+        refreshStreak();
       } else {
         throw new Error("Product not found.");
       }
@@ -261,7 +430,6 @@ export default function App() {
     setCurrentView('loading');
     setError(null);
     try {
-      // Use the product image from Open Food Facts raw data if available
       const productImageUrl = product?.image_front_small_url
         || product?.image_front_url
         || product?.image_url
@@ -278,13 +446,12 @@ export default function App() {
       setAnalysisResult(enrichedResult);
       setCurrentView('results');
 
-      if (authToken) {
-        const saveResponse = await fetch('http://localhost:5000/scans', {
+      const saveResponse = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/scans`,
+        {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             productName: enrichedResult.productName,
             brand: enrichedResult.brand,
@@ -297,13 +464,13 @@ export default function App() {
             imageUrl: productImageUrl,
             productData
           })
-        });
-        if (saveResponse.ok) {
-          const savedScan = await saveResponse.json();
-          setAnalysisResult(prev => prev ? { ...prev, scanId: savedScan.id, servings: savedScan.servings || 1 } : prev);
         }
-        refreshStreak();
+      );
+      if (saveResponse.ok) {
+        const savedScan = await saveResponse.json();
+        setAnalysisResult(prev => prev ? { ...prev, scanId: savedScan.id, servings: savedScan.servings || 1 } : prev);
       }
+      refreshStreak();
     } catch (err) {
       console.error(err);
       const msg = err.message?.includes('Rate limited') || err.message?.includes('wait')
@@ -319,12 +486,27 @@ export default function App() {
     setCurrentView('dashboard');
   };
 
+  const shellViews = new Set([
+    'dashboard',
+    'streak',
+    'trends',
+    'profile',
+    'features',
+    'history',
+    'compare',
+    'foodDatabase',
+    'home',
+    'barcode',
+    'results',
+  ]);
+  const useDesktopShell = shellViews.has(currentView);
+
   return (
     <main id="root" className="animate-fade-in-up">
       {error && (
         <div className="fixed top-6 left-6 right-6 z-[200] animate-streak-pop">
           <div className="bg-error/90 backdrop-blur-xl text-white p-4 rounded-2xl text-xs font-black uppercase tracking-widest flex justify-between items-center shadow-2xl">
-            <span>{error}</span>
+            <span>{t(error)}</span>
             <button className="bg-white/20 px-3 py-1.5 rounded-lg hover:bg-white/30 transition-colors" onClick={() => setError(null)}>
               Dismiss
             </button>
@@ -369,114 +551,124 @@ export default function App() {
         />
       )}
 
-      {currentView === 'dashboard' && (
-        <Dashboard
+      {useDesktopShell && (
+        <DesktopAppShell
+          currentView={currentView}
           userAuth={userAuth}
           userProfile={userProfile}
-          authToken={authToken}
           onNavigate={(view) => setCurrentView(view)}
-          onViewDetail={(result) => {
-            setAnalysisResult(result);
-            setCurrentView('results');
-          }}
-          isDark={isDark}
-          toggleTheme={toggleTheme}
           onLogout={handleLogout}
-        />
-      )}
+        >
+          {currentView === 'dashboard' && (
+            <Dashboard
+              userAuth={userAuth}
+              userProfile={userProfile}
+              authToken={authToken}
+              onNavigate={(view) => setCurrentView(view)}
+              onViewDetail={(result) => {
+                setAnalysisResult(result);
+                setCurrentView('results');
+              }}
+              isDark={isDark}
+              toggleTheme={toggleTheme}
+              onLogout={handleLogout}
+            />
+          )}
 
-      {currentView === 'streak' && (
-        <StreakLeaderboard
-          userAuth={userAuth}
-          authToken={authToken}
-          onBack={() => setCurrentView('dashboard')}
-        />
-      )}
+          {currentView === 'streak' && (
+            <StreakLeaderboard
+              userAuth={userAuth}
+              authToken={authToken}
+              onBack={() => setCurrentView('dashboard')}
+            />
+          )}
 
-      {currentView === 'trends' && (
-        <Trends
-          authToken={authToken}
-          onNavigate={(view) => setCurrentView(view)}
-        />
-      )}
+          {currentView === 'trends' && (
+            <Trends
+              authToken={authToken}
+              onNavigate={(view) => setCurrentView(view)}
+            />
+          )}
 
-      {currentView === 'profile' && (
-        <Profile
-          userProfile={userProfile}
-          userAuth={userAuth}
-          authToken={authToken}
-          onBack={() => setCurrentView('dashboard')}
-          onDelete={handleLogout}
-          onLogout={handleLogout}
-          onDetailsSaved={handleUserDetailsUpdated}
-          onNavigateFeatures={() => setCurrentView('features')}
-          isDark={isDark}
-          toggleTheme={toggleTheme}
-        />
-      )}
+          {currentView === 'profile' && (
+            <Profile
+              userProfile={userProfile}
+              userAuth={userAuth}
+              authToken={authToken}
+              onBack={() => setCurrentView('dashboard')}
+              onDelete={handleLogout}
+              onLogout={handleLogout}
+              onDetailsSaved={handleUserDetailsUpdated}
+              onNavigateFeatures={() => setCurrentView('features')}
+              isDark={isDark}
+              toggleTheme={toggleTheme}
+            />
+          )}
 
-      {currentView === 'features' && (
-        <FeatureRequests
-          userAuth={userAuth}
-          authToken={authToken}
-          onBack={() => setCurrentView('profile')}
-        />
-      )}
+          {currentView === 'features' && (
+            <FeatureRequests
+              userAuth={userAuth}
+              authToken={authToken}
+              onBack={() => setCurrentView('profile')}
+            />
+          )}
 
-      {currentView === 'history' && (
-        <History
-          authToken={authToken}
-          onBack={() => setCurrentView('dashboard')}
-          onViewDetail={(result) => {
-            setAnalysisResult(result);
-            setCurrentView('results');
-          }}
-        />
-      )}
+          {currentView === 'history' && (
+            <History
+              authToken={authToken}
+              onBack={() => setCurrentView('dashboard')}
+              onViewDetail={(result) => {
+                setAnalysisResult(result);
+                setCurrentView('results');
+              }}
+            />
+          )}
 
-      {currentView === 'compare' && (
-        <Compare
-          authToken={authToken}
-          onBack={() => setCurrentView('dashboard')}
-        />
-      )}
+          {currentView === 'compare' && (
+            <Compare
+              authToken={authToken}
+              onBack={() => setCurrentView('dashboard')}
+            />
+          )}
 
-      {currentView === 'foodDatabase' && (
-        <FoodDatabase
-          authToken={authToken}
-          onBack={() => setCurrentView('dashboard')}
-          onSelectProduct={handleDatabaseProductSelected}
-        />
-      )}
+          {currentView === 'foodDatabase' && (
+            <FoodDatabase
+              authToken={authToken}
+              onBack={() => setCurrentView('dashboard')}
+              onSelectProduct={handleDatabaseProductSelected}
+            />
+          )}
 
-      {currentView === 'home' && (
-        <Home
-          onImageSelected={handleImageSelected}
-          onNavigateProfile={() => setCurrentView('profile')}
-          onBack={() => setCurrentView('dashboard')}
-          onNavigateBarcode={() => setCurrentView('barcode')}
-        />
-      )}
+          {currentView === 'home' && (
+            <Home
+              onImageSelected={handleImageSelected}
+              onNavigateProfile={() => setCurrentView('profile')}
+              onBack={() => setCurrentView('dashboard')}
+              onNavigateBarcode={() => setCurrentView('barcode')}
+            />
+          )}
 
-      {currentView === 'barcode' && (
-        <BarcodeScanner
-          onScan={handleBarcodeScanned}
-          onBack={() => setCurrentView('home')}
-        />
+          {currentView === 'barcode' && (
+            <BarcodeScanner
+              onScan={handleBarcodeScanned}
+              onBack={() => setCurrentView('home')}
+            />
+          )}
+
+          {currentView === 'results' && analysisResult && (
+            <Results
+              result={analysisResult}
+              onBack={handleBackToHome}
+              authToken={authToken}
+              onServingsChanged={(scanId, newServings) => {
+                setAnalysisResult(prev => prev ? { ...prev, servings: newServings } : prev);
+              }}
+            />
+          )}
+        </DesktopAppShell>
       )}
 
       {currentView === 'loading' && <LoadingState />}
-
-      {currentView === 'results' && analysisResult && (
-        <Results
-          result={analysisResult}
-          onBack={handleBackToHome}
-          authToken={authToken}
-          onServingsChanged={(scanId, newServings) => {
-            setAnalysisResult(prev => prev ? { ...prev, servings: newServings } : prev);
-          }}
-        />
-      )}
     </main>
   );
 }

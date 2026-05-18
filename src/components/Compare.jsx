@@ -16,11 +16,10 @@ export default function Compare({ authToken, onBack }) {
   useEffect(() => {
     const fetchHistory = async () => {
       try {
-        const response = await fetch('http://localhost:5000/scans', {
-          headers: {
-            'Authorization': `Bearer ${authToken}`
-          }
-        });
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/scans`,
+          { credentials: 'include' }
+        );
         if (!response.ok) throw new Error('Failed to fetch history');
         const data = await response.json();
         setScans(data);
@@ -32,8 +31,8 @@ export default function Compare({ authToken, onBack }) {
       }
     };
 
-    if (authToken) fetchHistory();
-  }, [authToken]);
+    fetchHistory();
+  }, []);
 
   const toggleSelection = (scan) => {
     setSelectedScans(prev => {
@@ -107,8 +106,8 @@ export default function Compare({ authToken, onBack }) {
   const totalPages = Math.ceil(filteredScans.length / itemsPerPage);
   const paginatedScans = filteredScans.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  const visibleIsLoading = authToken ? isLoading : false;
-  const visibleError = authToken ? error : 'Not authenticated.';
+  const visibleIsLoading = isLoading;
+  const visibleError = error;
 
   return (
     <div className="compare-page animate-fade-in-up">

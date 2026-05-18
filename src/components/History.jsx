@@ -23,16 +23,11 @@ export default function History({ authToken, onBack, onViewDetail }) {
     let isMounted = true;
 
     const loadHistory = async () => {
-      if (!authToken) {
-        setIsLoading(false);
-        setError('Not authenticated.');
-        return;
-      }
-
       try {
-        const response = await fetch('http://localhost:5000/scans', {
-          headers: { Authorization: `Bearer ${authToken}` },
-        });
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/scans`,
+          { credentials: 'include' }
+        );
         if (!response.ok) throw new Error('Failed to load history');
         const data = await response.json();
         if (isMounted) setScans(Array.isArray(data) ? data : []);
@@ -49,7 +44,7 @@ export default function History({ authToken, onBack, onViewDetail }) {
     return () => {
       isMounted = false;
     };
-  }, [authToken]);
+  }, []);
 
   const filteredScans = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();

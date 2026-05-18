@@ -20,12 +20,6 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
     const controller = new AbortController();
 
     const loadProducts = async () => {
-      if (!authToken) {
-        setIsLoading(false);
-        setError(t('sign_in_food_db'));
-        return;
-      }
-
       setIsLoading(true);
       setError('');
 
@@ -33,16 +27,14 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
         const query = searchTerm.trim()
           ? `?search=${encodeURIComponent(searchTerm.trim())}`
           : '';
-        const response = await fetch(`http://localhost:5000/scans/database${query}`, {
-          headers: { Authorization: `Bearer ${authToken}` },
-          signal: controller.signal,
-        });
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/scans/database${query}`,
+          { credentials: 'include', signal: controller.signal }
+        );
 
         if (!response.ok) throw new Error('Failed to load products');
         const localData = await response.json();
         let nextProducts = Array.isArray(localData) ? localData : [];
-
-
 
         if (isMounted) setProducts(nextProducts);
       } catch (loadError) {
@@ -62,7 +54,7 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
       controller.abort();
       clearTimeout(timeoutId);
     };
-  }, [authToken, searchTerm, t]);
+  }, [searchTerm, t]);
 
   const productCountLabel = useMemo(() => {
     if (isLoading) return t('loading_products');

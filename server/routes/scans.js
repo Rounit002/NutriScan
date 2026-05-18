@@ -7,7 +7,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key';
 
 // Middleware to authenticate
 const authenticate = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
+  const token = req.cookies?.token;
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
@@ -188,6 +188,10 @@ const upsertProductDatabase = async (pool, userId, scan) => {
     score,
     ingredients,
     productData,
+    verdict,
+    alternatives,
+    sideEffects,
+    lang = 'en',
   } = scan;
 
   if (!productName) return;
@@ -197,6 +201,34 @@ const upsertProductDatabase = async (pool, userId, scan) => {
   const productIngredientsText = productData?.ingredients_text || parseIngredientsText(ingredients);
   const productKey = normalizeProductKey(productBrand, productName);
   const nutriments = normalizeNutrimentsForServing(productData);
+
+  // Parse active target language
+  const targetLang = String(lang).trim().toLowerCase();
+
+  // Load existing translations to ensure we do not overwrite other languages
+  let currentTranslations = {};
+  try {
+    const existingRes = await pool.query('SELECT translations FROM product_database WHERE product_key = $1', [productKey]);
+    if (existingRes.rows.length > 0) {
+      currentTranslations = existingRes.rows[0].translations || {};
+    }
+  } catch (err) {
+    console.warn('[upsertProductDatabase] Failed to read current translations:', err.message);
+  }
+
+  // Populate or merge translation details for this non-English locale
+  if (targetLang !== 'en') {
+    currentTranslations[targetLang] = {
+      brand: productBrand,
+      productName: productName,
+      score: score,
+      nutrition: nutriments || {},
+      verdict: safeJsonParse(verdict, Array.isArray(verdict) ? verdict : []),
+      sideEffects: safeJsonParse(sideEffects, Array.isArray(sideEffects) ? sideEffects : []),
+      ingredientsAnalysis: ingredientsAnalysis || [],
+      alternatives: safeJsonParse(alternatives, Array.isArray(alternatives) ? alternatives : []),
+    };
+  }
 
   await pool.query(
     `
@@ -212,9 +244,10 @@ const upsertProductDatabase = async (pool, userId, scan) => {
         scan_count,
         first_scanned_by,
         last_scanned_by,
+        translations,
         updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9, $9, CURRENT_TIMESTAMP)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9, $9, $10, CURRENT_TIMESTAMP)
       ON CONFLICT (product_key)
       DO UPDATE SET
         product_name = EXCLUDED.product_name,
@@ -226,6 +259,7 @@ const upsertProductDatabase = async (pool, userId, scan) => {
         latest_score = EXCLUDED.latest_score,
         scan_count = product_database.scan_count + 1,
         last_scanned_by = EXCLUDED.last_scanned_by,
+        translations = EXCLUDED.translations,
         updated_at = CURRENT_TIMESTAMP
     `,
     [
@@ -238,6 +272,7 @@ const upsertProductDatabase = async (pool, userId, scan) => {
       productData ? JSON.stringify(productData) : null,
       score,
       userId,
+      JSON.stringify(currentTranslations),
     ]
   );
 };
@@ -468,6 +503,10 @@ router.post('/', async (req, res) => {
       score,
       ingredients,
       productData,
+      verdict,
+      alternatives,
+      sideEffects,
+      lang: req.headers['accept-language'] || req.body.lang || 'en',
     });
 
     // Reward points for scanning
@@ -490,19 +529,78 @@ router.patch('/:id/servings', async (req, res) => {
   }
 
   try {
-    const result = await req.pool.query(
-      'UPDATE scans SET servings = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
-      [Number(servings), scanId, req.userId]
-    );
-
-    if (result.rows.length === 0) {
+    const scanRes = await req.pool.query('SELECT user_id FROM scans WHERE id = $1', [scanId]);
+    if (scanRes.rows.length === 0) {
       return res.status(404).json({ error: 'Scan not found' });
     }
+
+    const scan = scanRes.rows[0];
+    const { requireOwnership } = require('../utils/ownershipCheck');
+    requireOwnership(scan.user_id, req.userId);
+
+    const result = await req.pool.query(
+      'UPDATE scans SET servings = $1 WHERE id = $2 RETURNING *',
+      [Number(servings), scanId]
+    );
 
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Failed to update servings:', error);
-    res.status(500).json({ error: 'Failed to update servings' });
+    res.status(error.status || 500).json({ error: error.message || 'Failed to update servings' });
+  }
+});
+
+// GET a single scan by ID (with ownership check)
+router.get('/:id', async (req, res) => {
+  const scanId = req.params.id;
+  try {
+    const scanRes = await req.pool.query(
+      `
+        SELECT
+          s.*,
+          COALESCE(s.nutriments, pd.nutriments) AS nutriments,
+          COALESCE(s.raw_product_data, pd.raw_product_data) AS raw_product_data
+        FROM scans s
+        LEFT JOIN product_database pd
+          ON pd.product_key = LOWER(COALESCE(s.brand, 'unknown')) || '::' || LOWER(TRIM(COALESCE(s.product_name, '')))
+        WHERE s.id = $1
+      `,
+      [scanId]
+    );
+
+    if (scanRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Scan not found' });
+    }
+
+    const scan = scanRes.rows[0];
+    const { requireOwnership } = require('../utils/ownershipCheck');
+    requireOwnership(scan.user_id, req.userId);
+
+    res.json(scan);
+  } catch (error) {
+    console.error('Failed to get scan:', error);
+    res.status(error.status || 500).json({ error: error.message || 'Failed to fetch scan' });
+  }
+});
+
+// DELETE a scan by ID (with ownership check)
+router.delete('/:id', async (req, res) => {
+  const scanId = req.params.id;
+  try {
+    const scanRes = await req.pool.query('SELECT user_id FROM scans WHERE id = $1', [scanId]);
+    if (scanRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Scan not found' });
+    }
+
+    const scan = scanRes.rows[0];
+    const { requireOwnership } = require('../utils/ownershipCheck');
+    requireOwnership(scan.user_id, req.userId);
+
+    await req.pool.query('DELETE FROM scans WHERE id = $1', [scanId]);
+    res.json({ message: 'Scan successfully deleted' });
+  } catch (error) {
+    console.error('Failed to delete scan:', error);
+    res.status(error.status || 500).json({ error: error.message || 'Failed to delete scan' });
   }
 });
 

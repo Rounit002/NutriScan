@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import { GoogleLogin } from '@react-oauth/google';
-import { jwtDecode } from 'jwt-decode';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Sparkles, CheckCircle, Flame } from 'lucide-react';
 
 export default function Login({ onLogin, onNavigateSignup }) {
   const [email, setEmail] = useState('');
@@ -15,14 +13,18 @@ export default function Login({ onLogin, onNavigateSignup }) {
     setIsSubmitting(true);
     setError('');
     try {
-      const res = await fetch('http://localhost:5000/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/login`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ email, password })
+        }
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      onLogin(data.user, data.token, data.deletionCancelled);
+      onLogin(data.user, null, data.deletionCancelled);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -30,152 +32,503 @@ export default function Login({ onLogin, onNavigateSignup }) {
     }
   };
 
-  const handleGoogleSuccess = async (credentialResponse) => {
-    try {
-      const decoded = jwtDecode(credentialResponse.credential);
-      const res = await fetch('http://localhost:5000/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: decoded.email, name: decoded.name, googleId: decoded.sub })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      onLogin(data.user, data.token, data.deletionCancelled);
-    } catch {
-      setError('Google login failed');
-    }
-  };
+
 
   return (
-    <div className="nf-auth-page">
+    <div className="nf-auth-page page-transition">
       <style>{`
         .nf-auth-page {
-          min-height: 100vh; display: flex; flex-direction: column; align-items: center;
-          background: #ffffff !important; font-family: var(--font-main, 'Inter', sans-serif);
-          padding: clamp(34px, 8vh, 70px) 28px 34px; box-sizing: border-box;
+          min-height: 100vh;
+          display: flex;
+          background: #f8fafc;
+          font-family: var(--font-main, 'DM Sans', sans-serif);
         }
-        .nf-auth-page *, .nf-auth-page *::before, .nf-auth-page *::after { box-sizing: border-box; }
-        .nf-auth-page input, .nf-auth-page select, .nf-auth-page textarea {
-          background-color: #ffffff !important;
+        
+        .nf-auth-sidebar {
+          display: none;
+          flex: 1.2;
+          background: linear-gradient(135deg, #065f46 0%, #10b981 100%);
+          color: #ffffff;
+          flex-direction: column;
+          justify-content: space-between;
+          padding: 60px;
+          position: relative;
+          overflow: hidden;
         }
-        .nf-auth-inner { width: 100%; max-width: 340px; display: flex; flex-direction: column; align-items: center; }
-        .nf-brand { align-self: flex-start; margin: 0 0 clamp(34px, 9vh, 62px); font-family: Georgia, serif; font-size: 1.55rem; line-height: 1; letter-spacing: -0.055em; color: #5C6B3C; }
-        .nf-brand-flow { color: #8A8275; font-weight: 700; }
-        .nf-auth-title { font-size: 1.72rem; font-weight: 850; color: #080808; text-align: center; margin: 0 0 36px; letter-spacing: -0.04em; }
-        .nf-input-group { width: 100%; margin-bottom: 18px; }
+
+        .nf-auth-sidebar::before {
+          content: '';
+          position: absolute;
+          width: 300px;
+          height: 300px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.03);
+          top: -100px;
+          right: -100px;
+        }
+
+        .nf-auth-sidebar::after {
+          content: '';
+          position: absolute;
+          width: 500px;
+          height: 500px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.02);
+          bottom: -150px;
+          left: -150px;
+        }
+
+        .nf-sidebar-brand {
+          font-family: var(--font-headline, 'Sora', sans-serif);
+          font-size: 1.8rem;
+          font-weight: 800;
+          letter-spacing: -0.03em;
+        }
+
+        .nf-sidebar-brand span {
+          color: #34d399;
+        }
+
+        .nf-sidebar-hero h2 {
+          font-family: var(--font-headline, 'Sora', sans-serif);
+          font-size: 2.8rem;
+          font-weight: 800;
+          line-height: 1.2;
+          margin-bottom: 24px;
+          letter-spacing: -0.04em;
+        }
+
+        .nf-feature-item {
+          display: flex;
+          align-items: flex-start;
+          gap: 16px;
+          margin-bottom: 24px;
+          background: rgba(255, 255, 255, 0.08);
+          padding: 16px;
+          border-radius: 16px;
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .nf-feature-icon {
+          background: rgba(255, 255, 255, 0.15);
+          padding: 8px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .nf-feature-title {
+          font-weight: 700;
+          font-size: 1.05rem;
+          margin-bottom: 4px;
+        }
+
+        .nf-feature-desc {
+          font-size: 0.88rem;
+          opacity: 0.85;
+          line-height: 1.4;
+        }
+
+        .nf-sidebar-footer {
+          font-size: 0.85rem;
+          opacity: 0.7;
+        }
+
+        .nf-auth-main {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          padding: 40px 24px;
+          background: #ffffff;
+        }
+
+        .nf-auth-inner {
+          width: 100%;
+          max-width: 380px;
+          display: flex;
+          flex-direction: column;
+        }
+
+        .nf-mobile-brand {
+          font-family: var(--font-headline, 'Sora', sans-serif);
+          font-size: 1.5rem;
+          font-weight: 800;
+          color: #047857;
+          margin-bottom: 32px;
+          display: block;
+        }
+
+        .nf-mobile-brand span {
+          color: #10b981;
+        }
+
+        .nf-auth-title {
+          font-family: var(--font-headline, 'Sora', sans-serif);
+          font-size: 2rem;
+          font-weight: 800;
+          color: #0f172a;
+          margin-bottom: 8px;
+          letter-spacing: -0.03em;
+        }
+
+        .nf-auth-subtitle {
+          font-size: 0.95rem;
+          color: #64748b;
+          margin-bottom: 32px;
+        }
+
+        .nf-input-group {
+          width: 100%;
+          margin-bottom: 20px;
+        }
+
+        .nf-input-label {
+          display: block;
+          font-size: 0.85rem;
+          font-weight: 600;
+          color: #475569;
+          margin-bottom: 6px;
+        }
+
         .nf-input {
-          width: 100%; height: 32px; border: 1.4px solid #d9e1da; border-radius: 6px !important; padding: 0 10px;
-          font-size: 0.86rem; color: #1a1a1a; outline: none;
-          transition: border-color 0.2s, box-shadow 0.2s; font-family: inherit; box-sizing: border-box;
+          width: 100%;
+          height: 48px;
+          border: 1.5px solid #cbd5e1;
+          border-radius: 12px !important;
+          padding: 0 16px;
+          font-size: 0.95rem;
+          color: #0f172a;
+          outline: none;
+          background-color: #ffffff !important;
+          transition: all 0.2s;
         }
-        .nf-input::placeholder { color: #aeb5af; font-weight: 500; }
-        .nf-input:focus { border-color: #5C6B3C; box-shadow: 0 0 0 3px rgba(92, 107, 60, 0.1); }
-        .nf-input-wrapper { position: relative; }
+
+        .nf-input:focus {
+          border-color: #10b981;
+          box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+        }
+
         .nf-eye-btn {
-          position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-          background: none; border: none; color: #bbb; cursor: pointer; padding: 4px;
+          position: absolute;
+          right: 14px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: none;
+          border: none;
+          color: #94a3b8;
+          cursor: pointer;
+          padding: 4px;
+          display: flex;
+          align-items: center;
         }
-        .nf-forgot { text-align: right; width: 100%; margin-top: -4px; margin-bottom: clamp(34px, 8vh, 52px); }
-        .nf-forgot button { background: none; border: none; color: #111; font-size: 0.82rem; font-weight: 800; cursor: pointer; padding: 0; }
+
+        .nf-eye-btn:hover {
+          color: #475569;
+        }
+
+        .nf-forgot {
+          display: flex;
+          justify-content: flex-end;
+          width: 100%;
+          margin-bottom: 24px;
+        }
+
+        .nf-forgot button {
+          background: none;
+          border: none;
+          color: #10b981;
+          font-size: 0.85rem;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .nf-forgot button:hover {
+          color: #059669;
+          text-decoration: underline;
+        }
+
         .nf-submit-btn {
-          width: 100%; height: 45px; border-radius: 999px; border: none;
-          background: #5C6B3C; color: #fff; font-size: 0.9rem; font-weight: 800;
-          cursor: pointer; transition: all 0.2s; margin-top: 0; letter-spacing: 0;
-          box-shadow: 0 8px 18px rgba(92, 107, 60, 0.22);
+          width: 100%;
+          height: 48px;
+          border-radius: 12px;
+          border: none;
+          background: #10b981;
+          color: #ffffff;
+          font-size: 0.95rem;
+          font-weight: 700;
+          cursor: pointer;
+          box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
         }
-        .nf-submit-btn:hover { background: #4A5731; transform: translateY(-1px); box-shadow: 0 10px 22px rgba(92, 107, 60, 0.28); }
-        .nf-submit-btn:active { transform: translateY(0); }
-        .nf-submit-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
-        .nf-divider { display: flex; align-items: center; gap: 12px; width: 100%; margin: clamp(48px, 10vh, 64px) 0 22px; }
-        .nf-divider-line { flex: 1; height: 1px; background: #dfe3df; }
-        .nf-divider-text { color: #777; font-size: 0.72rem; font-weight: 700; }
-        .nf-social-row { display: flex; gap: 10px; justify-content: center; margin-bottom: clamp(42px, 10vh, 58px); }
-        .nf-social-btn {
-          width: 48px; height: 34px; border-radius: 8px; border: none; cursor: pointer;
-          display: flex; align-items: center; justify-content: center; font-size: 1.15rem;
-          font-weight: 800; color: #fff; transition: transform 0.15s; background: #5C6B3C;
+
+        .nf-submit-btn:hover {
+          background: #059669;
+          box-shadow: 0 6px 20px rgba(5, 150, 105, 0.4);
         }
-        .nf-social-btn:hover { transform: scale(1.05); }
+
+        .nf-submit-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          box-shadow: none;
+        }
+
+        .nf-divider {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          width: 100%;
+          margin: 32px 0 24px;
+        }
+
+        .nf-divider-line {
+          flex: 1;
+          height: 1px;
+          background: #e2e8f0;
+        }
+
+        .nf-divider-text {
+          color: #94a3b8;
+          font-size: 0.8rem;
+          font-weight: 600;
+        }
+
+        .nf-social-row {
+          display: flex;
+          gap: 12px;
+          justify-content: center;
+          margin-bottom: 32px;
+        }
+
         .nf-google-wrap {
-          border-radius: 8px; overflow: hidden; width: 48px; height: 34px; background: #5C6B3C;
-          display: grid; place-items: center; position: relative; transition: transform 0.15s;
+          border-radius: 12px;
+          overflow: hidden;
+          width: 54px;
+          height: 40px;
+          background: #f1f5f9;
+          display: grid;
+          place-items: center;
+          position: relative;
+          border: 1px solid #e2e8f0;
         }
-        .nf-google-wrap:hover { transform: scale(1.05); }
+
+        .nf-google-wrap:hover {
+          background: #e2e8f0;
+        }
+
         .nf-google-face {
-          position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-          color: #fff; font-size: 1.12rem; font-weight: 900; line-height: 1; pointer-events: none;
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #334155;
+          font-size: 1.2rem;
+          font-weight: 800;
+          pointer-events: none;
         }
-        .nf-google-control { position: absolute; inset: 0; opacity: 0.01; }
-        .nf-google-control > div { width: 100% !important; height: 100% !important; }
-        .nf-switch-text { color: #161616; font-size: 0.78rem; text-align: center; font-weight: 650; margin: 0; }
-        .nf-switch-link { display: block; margin: 12px auto 0; background: none; border: none; color: #5C6B3C; font-weight: 800; cursor: pointer; font-size: 0.88rem; }
-        .nf-error { width: 100%; background: #FFF0F0; color: #D32F2F; padding: 10px 12px; border-radius: 10px; font-size: 0.78rem; font-weight: 700; margin-bottom: 14px; text-align: center; }
-        .nf-spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .nf-google-control {
+          position: absolute;
+          inset: 0;
+          opacity: 0.01;
+        }
+
+        .nf-google-control > div {
+          width: 100% !important;
+          height: 100% !important;
+        }
+
+        .nf-social-btn {
+          width: 54px;
+          height: 40px;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.2rem;
+          font-weight: 800;
+          color: #334155;
+          background: #f1f5f9;
+        }
+
+        .nf-social-btn:hover {
+          background: #e2e8f0;
+        }
+
+        .nf-switch-text {
+          color: #64748b;
+          font-size: 0.9rem;
+          text-align: center;
+          margin: 0;
+        }
+
+        .nf-switch-link {
+          background: none;
+          border: none;
+          color: #10b981;
+          font-weight: 700;
+          cursor: pointer;
+          font-size: 0.9rem;
+          margin-left: 6px;
+        }
+
+        .nf-switch-link:hover {
+          color: #059669;
+          text-decoration: underline;
+        }
+
+        .nf-error {
+          width: 100%;
+          background: #fef2f2;
+          color: #ef4444;
+          padding: 12px 16px;
+          border-radius: 12px;
+          font-size: 0.85rem;
+          font-weight: 600;
+          margin-bottom: 24px;
+          border: 1px solid #fee2e2;
+          text-align: center;
+        }
+
+        .nf-spinner {
+          width: 18px;
+          height: 18px;
+          border: 2.5px solid rgba(255,255,255,0.3);
+          border-top-color: #ffffff;
+          border-radius: 50%;
+          animation: spin 0.6s linear infinite;
+          display: inline-block;
+          vertical-align: middle;
+          margin-right: 8px;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        @media (min-width: 1024px) {
+          .nf-auth-sidebar {
+            display: flex;
+          }
+          .nf-mobile-brand {
+            display: none;
+          }
+        }
       `}</style>
 
-      <main className="nf-auth-inner">
-        <div className="nf-brand">Fit<span className="nf-brand-flow">Scan</span></div>
+      {/* Left Sidebar Panel - Desktop Only */}
+      <aside className="nf-auth-sidebar">
+        <div className="nf-sidebar-brand">
+          Fit<span>Scan</span>
+        </div>
 
-        <h1 className="nf-auth-title">Log In</h1>
-
-        {error && <div className="nf-error">{error}</div>}
-
-        <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }} id="login-form">
-          <div className="nf-input-group">
-            <input className="nf-input" type="email" placeholder="Email" value={email}
-              onChange={(e) => setEmail(e.target.value)} required id="login-email" autoComplete="email" />
-          </div>
-
-          <div className="nf-input-group">
-            <div className="nf-input-wrapper">
-              <input className="nf-input" type={showPassword ? 'text' : 'password'} placeholder="Password"
-                value={password} onChange={(e) => setPassword(e.target.value)} required
-                id="login-password" autoComplete="current-password" style={{ paddingRight: '34px' }} />
-              <button type="button" className="nf-eye-btn" onClick={() => setShowPassword(!showPassword)} tabIndex={-1}>
-                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
+        <div className="nf-sidebar-hero">
+          <h2>Know exactly what you eat.</h2>
+          
+          <div className="nf-feature-item">
+            <div className="nf-feature-icon">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <div className="nf-feature-title">AI Label Analysis</div>
+              <div className="nf-feature-desc">Instantly decode ingredients and uncover harmful additives or hidden sugars.</div>
             </div>
           </div>
 
-          <div className="nf-forgot">
-            <button type="button">Forgot your password?</button>
+          <div className="nf-feature-item">
+            <div className="nf-feature-icon">
+              <CheckCircle size={20} />
+            </div>
+            <div>
+              <div className="nf-feature-title">Healthier Alternatives</div>
+              <div className="nf-feature-desc">Get tailored smart suggestions for better choices matching your lifestyle.</div>
+            </div>
           </div>
 
-          <button type="submit" className="nf-submit-btn" disabled={isSubmitting} id="login-submit">
-            {isSubmitting ? <><span className="nf-spinner" /> Signing in...</> : 'Log In'}
-          </button>
-        </form>
-
-        <div className="nf-divider">
-          <div className="nf-divider-line" />
-          <span className="nf-divider-text">or</span>
-          <div className="nf-divider-line" />
+          <div className="nf-feature-item">
+            <div className="nf-feature-icon">
+              <Flame size={20} />
+            </div>
+            <div>
+              <div className="nf-feature-title">Streak & Habits</div>
+              <div className="nf-feature-desc">Log your choices, maintain your streak, and earn badges along your wellness journey.</div>
+            </div>
+          </div>
         </div>
 
-        <div className="nf-social-row">
-          <div className="nf-google-wrap">
-            <span className="nf-google-face" aria-hidden="true">G</span>
-            <div className="nf-google-control">
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={() => setError('Google Login Failed')}
-                type="icon"
-                shape="rectangular"
-                size="large"
+        <div className="nf-sidebar-footer">
+          &copy; {new Date().getFullYear()} FitScan Inc. All rights reserved.
+        </div>
+      </aside>
+
+      {/* Right Form Panel */}
+      <main className="nf-auth-main">
+        <div className="nf-auth-inner">
+          <div className="nf-mobile-brand">
+            Fit<span>Scan</span>
+          </div>
+
+          <h1 className="nf-auth-title">Welcome back</h1>
+          <p className="nf-auth-subtitle">Log in to your account to continue</p>
+
+          {error && <div className="nf-error">{error}</div>}
+
+          <form onSubmit={handleSubmit} id="login-form">
+            <div className="nf-input-group">
+              <label className="nf-input-label" htmlFor="login-email">Email Address</label>
+              <input 
+                className="nf-input" 
+                type="email" 
+                placeholder="you@example.com" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)} 
+                required 
+                id="login-email" 
+                autoComplete="email" 
               />
             </div>
-          </div>
-          <button className="nf-social-btn" title="Facebook">f</button>
-          <button className="nf-social-btn" title="Apple">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" /></svg>
-          </button>
-        </div>
 
-        <p className="nf-switch-text">
-          Don't have account yet?
-          <button className="nf-switch-link" onClick={onNavigateSignup} id="navigate-signup">Sign up</button>
-        </p>
+            <div className="nf-input-group">
+              <label className="nf-input-label" htmlFor="login-password">Password</label>
+              <div className="relative">
+                <input 
+                  className="nf-input" 
+                  type={showPassword ? 'text' : 'password'} 
+                  placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)} 
+                  required
+                  id="login-password" 
+                  autoComplete="current-password" 
+                  style={{ paddingRight: '46px' }} 
+                />
+                <button type="button" className="nf-eye-btn" onClick={() => setShowPassword(!showPassword)} tabIndex={-1}>
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="nf-forgot">
+              <button type="button">Forgot your password?</button>
+            </div>
+
+            <button type="submit" className="nf-submit-btn" disabled={isSubmitting} id="login-submit">
+              {isSubmitting ? <><span className="nf-spinner" /> Logging in...</> : 'Log In'}
+            </button>
+          </form>
+
+
+
+          <p className="nf-switch-text">
+            Don't have an account?
+            <button className="nf-switch-link" onClick={onNavigateSignup} id="navigate-signup">Sign up for free</button>
+          </p>
+        </div>
       </main>
     </div>
   );

@@ -1,16 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Playfair+Display:wght@400;500;600;700;800;900&family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Sora:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700;800;900&family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&family=Noto+Nastaliq+Urdu:wght@400;700&family=Noto+Sans+Devanagari:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 /* ── Tailwind v4 Theme — NutriScan Design System ── */
 @theme {
-  --color-ns-primary: #4B6F44;
-  --color-ns-primary-con: #4B6F44;
+  --color-ns-primary: #10b981;
+  --color-ns-primary-con: #059669;
   --color-ns-on-primary: #ffffff;
-  --color-ns-secondary: #9d4300;
-  --color-ns-secondary-con: #fd761a;
+  --color-ns-secondary: #047857;
+  --color-ns-secondary-con: #065f46;
   --color-ns-on-secondary: #ffffff;
-  --color-ns-tertiary: #006591;
-  --color-ns-tertiary-con: #23acf1;
+  --color-ns-tertiary: #0d9488;
+  --color-ns-tertiary-con: #0f766e;
   --color-ns-surface: #f8f9ff;
   --color-ns-surface-low: #eff4ff;
   --color-ns-surface-con: #e5eeff;
@@ -20,27 +21,93 @@
   --color-ns-on-surface-var: #3c4a42;
   --color-ns-outline: #6c7a71;
   --color-ns-outline-var: #bbcabf;
-  --color-ns-error: #ba1a1a;
-  --color-ns-error-con: #ffdad6;
+  --color-ns-error: #ef4444;
+  --color-ns-error-con: #fee2e2;
   --color-ns-inverse-surface: #213145;
-  --color-ns-success: #4B6F44;
+  --color-ns-success: #10b981;
 
   /* legacy aliases kept for existing code */
-  --color-accent-primary: #4B6F44;
-  --color-accent-secondary: #fd761a;
-  --color-accent-tertiary: #006591;
-  --color-success: #4B6F44;
-  --color-error: #ba1a1a;
-  --color-warning: #fd761a;
+  --color-accent-primary: #10b981;
+  --color-accent-secondary: #059669;
+  --color-accent-tertiary: #0d9488;
+  --color-success: #10b981;
+  --color-error: #ef4444;
+  --color-warning: #f59e0b;
   --color-bg-primary: #f8f9ff;
   --color-bg-secondary: #eff4ff;
   --color-bg-tertiary: #ffffff;
   --color-text-primary: #0b1c30;
   --color-text-secondary: #3c4a42;
 
-  --font-main: 'Inter', sans-serif;
-  --font-headline: 'Manrope', sans-serif;
+  --font-main: 'DM Sans', 'Inter', sans-serif;
+  --font-headline: 'Sora', 'Manrope', sans-serif;
 }
+
+/* ── Script-Specific Typographies (Cairo, Noto Sans Arabic, Noto Nastaliq Urdu, Noto Sans Devanagari) ── */
+:lang(ar), :lang(ar) body, :lang(ar) input, :lang(ar) button, :lang(ar) select, :lang(ar) textarea {
+  font-family: 'Cairo', 'Noto Sans Arabic', 'DM Sans', sans-serif !important;
+}
+
+:lang(ur), :lang(ur) body, :lang(ur) input, :lang(ur) button, :lang(ur) select, :lang(ur) textarea {
+  font-family: 'Noto Nastaliq Urdu', 'Cairo', 'DM Sans', sans-serif !important;
+  line-height: 2.0 !important;
+}
+
+:lang(ne), :lang(ne) body, :lang(ne) input, :lang(ne) button, :lang(ne) select, :lang(ne) textarea {
+  font-family: 'Noto Sans Devanagari', 'DM Sans', sans-serif !important;
+}
+
+/* ── RTL Absolute Positions adjustments & logical alignments ── */
+[dir="rtl"] .fitscan-lang-btn svg {
+  margin-left: 0;
+  margin-right: 0.5rem;
+}
+
+/* ── Global Micro-Transitions ── */
+button, a, input, select, textarea, .interactive-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:hover, a:hover, .interactive-card:hover {
+  transform: translateY(-1.5px);
+}
+
+button:active, a:active, .interactive-card:active {
+  transform: translateY(0.5px);
+}
+
+/* ── Page Transitions ── */
+@keyframes pageEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-transition {
+  animation: pageEnter 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* ── Spinner Utility ── */
+.spinner {
+  border: 2.5px solid rgba(255, 255, 255, 0.25);
+  border-left-color: #ffffff;
+  border-radius: 50%;
+  width: 1.25rem;
+  height: 1.25rem;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 
 .compare-page {
   min-height: 100vh;
@@ -1933,7 +2000,8 @@ input::placeholder {
     radial-gradient(circle at 50% -8%, rgba(75, 111, 68, 0.14), transparent 34%),
     linear-gradient(180deg, var(--ns-page-grad-start) 0%, var(--ns-page-grad-end) 100%);
   font-family: var(--font-main);
-  padding: 18px 14px;
+  padding: 18px 14px 96px;
+  position: relative;
 }
 
 .fitscan-phone-shell {
@@ -2163,10 +2231,41 @@ input::placeholder {
   font-weight: 750;
 }
 
+.fitscan-date-navigation-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.fitscan-nav-arrow-btn {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--ns-card-bg);
+  color: var(--ns-on-surface);
+  border: 1.5px solid var(--ns-border-light);
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.fitscan-nav-arrow-btn:hover {
+  background-color: var(--ns-surface-low);
+  transform: scale(1.05);
+}
+
+.fitscan-nav-arrow-btn:active {
+  transform: scale(0.95);
+}
+
 .fitscan-week-strip {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 7px;
+  flex-grow: 1;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -2183,7 +2282,7 @@ input::placeholder {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  border-radius: 50%;
+  border-radius: 12px;
   background: var(--ns-card-bg);
   color: var(--ns-on-surface-var);
   border: 1.5px solid var(--ns-border-light);
@@ -2645,7 +2744,8 @@ html.dark .fitscan-nutrient-chip b {
 }
 
 .fitscan-home-nav {
-  position: absolute;
+  position: fixed;
+  z-index: 150;
   left: 12px;
   right: 12px;
   bottom: 12px;
@@ -7202,4 +7302,1188 @@ html.dark .scan-torch-button {
 .label-uppercase {
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* ──────────────────────────────────────────────────────────
+   WIDESCREEN DESKTOP & LAPTOP RESPONSIVE OVERHAUL (>= 1024px)
+   ────────────────────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  /* ── 1. Global Page Wrappers Expansion ── */
+  .compare-page,
+  .history-page,
+  .streak-page,
+  .food-db-page,
+  .profile-page,
+  .personal-details-page,
+  .medical-profile-page,
+  .health-goals-page {
+    padding: 40px !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
+    min-height: 100vh !important;
+    background: radial-gradient(circle at 50% -8%, rgba(75, 111, 68, 0.08), transparent 45%),
+                linear-gradient(180deg, var(--ns-page-grad-start) 0%, var(--ns-page-grad-end) 100%) !important;
+  }
+
+  /* ── 2. Expansion of Content Shell Containers ── */
+  .compare-shell,
+  .history-phone-shell,
+  .streak-phone-shell,
+  .food-db-shell,
+  .profile-phone-shell,
+  .personal-details-shell,
+  .medical-profile-shell,
+  .health-goals-shell {
+    width: 100% !important;
+    max-width: 1080px !important;
+    min-height: auto !important;
+    margin: 20px auto !important;
+    padding: 40px !important;
+    border-radius: 28px !important;
+    background: var(--ns-shell-bg, var(--ns-card-bg)) !important;
+    border: 2px solid var(--ns-border-light) !important;
+    box-shadow: 0 30px 70px var(--shadow-lg) !important;
+    position: relative !important;
+    overflow: visible !important;
+  }
+
+  .profile-phone-shell {
+    max-width: 1040px !important;
+  }
+  .streak-phone-shell {
+    max-width: 1000px !important;
+  }
+  .personal-details-shell,
+  .medical-profile-shell,
+  .health-goals-shell {
+    max-width: 900px !important;
+  }
+
+  /* ── 3. Compare Page Side-by-Side Overhaul ── */
+  /* Split the product picker into standard left sidebar + right list grid */
+  .compare-picker {
+    display: grid !important;
+    grid-template-columns: 300px 1fr !important;
+    gap: 32px !important;
+    align-items: start !important;
+  }
+
+  .compare-hero-copy {
+    grid-column: 1 !important;
+  }
+
+  .compare-search {
+    grid-column: 1 !important;
+    margin-top: 8px !important;
+  }
+
+  .compare-product-list {
+    grid-column: 2 !important;
+    grid-row: span 3 !important;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)) !important;
+    gap: 16px !important;
+    margin-top: 0 !important;
+  }
+
+  .compare-pagination {
+    grid-column: 2 !important;
+    margin-top: 24px !important;
+  }
+
+  /* Centered, high-contrast compared product cards */
+  .compare-content .flex.gap-4.overflow-x-auto {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 24px !important;
+    overflow-x: visible !important;
+    padding-bottom: 20px !important;
+  }
+
+  .compare-content .flex.gap-4.overflow-x-auto > div {
+    min-width: 280px !important;
+    max-width: 320px !important;
+    flex: 1 1 280px !important;
+    margin: 0 !important;
+  }
+
+  /* ── 4. History Page Grid Overhaul ── */
+  .history-search-bar {
+    max-width: 480px !important;
+    margin: 0 auto 28px auto !important;
+  }
+
+  .history-list {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+    gap: 16px !important;
+    margin-top: 10px !important;
+  }
+
+  .history-entry-card {
+    min-height: 80px !important;
+    width: 100% !important;
+  }
+
+  /* ── 5. Streak Leaderboard Split Screen Overhaul ── */
+  /* Sidebar stats + scrollable rank list */
+  .streak-phone-shell {
+    display: grid !important;
+    grid-template-columns: 320px 1fr !important;
+    gap: 32px !important;
+    align-items: start !important;
+  }
+
+  .streak-page-header {
+    grid-column: span 2 !important;
+  }
+
+  .streak-stats-grid {
+    grid-column: 1 !important;
+    grid-template-columns: 1fr !important; /* Stack stats cards vertically in sidebar */
+    gap: 20px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .leaderboard-card {
+    grid-column: 2 !important;
+    margin-top: 0 !important;
+  }
+
+  /* ── 6. Food Database Sidebar & Grid Search Overhaul ── */
+  .food-db-shell {
+    display: grid !important;
+    grid-template-columns: 320px 1fr !important;
+    gap: 32px !important;
+    align-items: start !important;
+  }
+
+  .food-db-header {
+    grid-column: span 2 !important;
+  }
+
+  .food-db-hero {
+    grid-column: 1 !important;
+    margin-bottom: 0 !important;
+  }
+
+  .food-db-search {
+    grid-column: 1 !important;
+    margin-top: 16px !important;
+  }
+
+  .food-db-list {
+    grid-column: 2 !important;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important;
+    gap: 16px !important;
+    margin-top: 0 !important;
+  }
+
+  /* ── 7. Profile Page Cockpit Dashboard Overhaul ── */
+  .profile-phone-shell {
+    display: grid !important;
+    grid-template-columns: 320px 1fr !important;
+    gap: 32px !important;
+    align-items: start !important;
+  }
+
+  .profile-topbar {
+    grid-column: span 2 !important;
+  }
+
+  .profile-hero {
+    grid-column: 1 !important;
+    margin-bottom: 0 !important;
+    padding: 28px 20px !important;
+    border-radius: 24px !important;
+    border: 1.5px solid var(--ns-border-light) !important;
+    background: var(--ns-card-bg-alt) !important;
+  }
+
+  .profile-phone-shell > .profile-menu-section {
+    grid-column: 2 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 24px !important;
+    margin-top: 0 !important;
+  }
+
+  .profile-menu-section h2 {
+    border-bottom: 1.5px solid var(--ns-border-light) !important;
+    padding-bottom: 8px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .profile-menu-group {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important; /* Menu items aligned side-by-side */
+    gap: 12px !important;
+  }
+
+  /* ── 8. Personal Details Form Grid Deck ── */
+  .personal-details-card {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 20px !important;
+    padding: 24px !important;
+  }
+
+  .personal-detail-row {
+    margin-bottom: 0 !important;
+    border-bottom: none !important;
+    background: var(--ns-surface-low) !important;
+    padding: 16px !important;
+    border-radius: 16px !important;
+    border: 1px solid var(--ns-border-light) !important;
+  }
+
+  /* ── 9. Medical & Goals Choice Grids ── */
+  .medical-search-box,
+  .health-goals-search-box {
+    max-width: 480px !important;
+    margin: 0 auto 24px auto !important;
+  }
+
+  .medical-summary-card,
+  .health-goals-summary-card {
+    max-width: 720px !important;
+    margin: 0 auto 24px auto !important;
+  }
+
+  .medical-issue-list,
+  .health-goals-list {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)) !important;
+    gap: 16px !important;
+    margin-top: 16px !important;
+  }
+
+  .medical-issue-item {
+    width: 100% !important;
+  }
+
+  .medical-save-button,
+  .health-goals-save-button {
+    max-width: 320px !important;
+    margin: 28px auto 0 auto !important;
+  }
+
+  /* ── 10. Results Page split-layout dashboard ── */
+  .result-page {
+    padding: 40px !important;
+    max-width: 1200px !important;
+    margin: 0 auto !important;
+    background: transparent !important;
+  }
+  
+  .result-content {
+    display: grid !important;
+    grid-template-columns: 1.1fr 1.3fr !important;
+    gap: 40px !important;
+    align-items: start !important;
+    margin-top: 24px !important;
+  }
+
+  /* Results Left Column elements stack */
+  .result-summary-card {
+    grid-column: 1 !important;
+    margin-bottom: 0 !important;
+    position: sticky !important;
+    top: 40px !important;
+  }
+  
+  .result-primary-button.btn-primary {
+    grid-column: 1 !important;
+    margin-top: 20px !important;
+  }
+
+  .result-tabs {
+    grid-column: 1 !important;
+    margin-top: 24px !important;
+  }
+
+  .result-facts-card {
+    grid-column: 1 !important;
+    margin-top: 16px !important;
+  }
+
+  /* Results Right Column elements stack */
+  .result-section {
+    grid-column: 2 !important;
+    margin-top: 0 !important;
+    margin-bottom: 32px !important;
+  }
+  
+  .result-section-list {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+  }
+  
+  .result-bottom-button {
+    grid-column: span 2 !important;
+    max-width: 320px !important;
+    margin: 40px auto 0 !important;
+  }
+
+  /* ── 11. Trends Sidebar & Graph Dashboard ── */
+  .trends-page {
+    max-width: 1100px !important;
+    margin: 0 auto !important;
+    padding: 40px 20px !important;
+  }
+
+  .trends-content {
+    display: grid !important;
+    grid-template-columns: 320px 1fr !important;
+    gap: 32px !important;
+    align-items: start !important;
+  }
+
+  .trends-stats-grid {
+    grid-column: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 16px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .trends-filter-bar {
+    grid-column: 1 !important;
+    margin-top: 16px !important;
+  }
+
+  .custom-range-inputs {
+    grid-column: 1 !important;
+    margin-top: 8px !important;
+  }
+
+  .trends-graph-container {
+    grid-column: 2 !important;
+    grid-row: span 4 !important;
+    margin-top: 0 !important;
+  }
+
+  /* ── 12. Feature Requests Grid split view ── */
+  .feature-requests-page {
+    max-width: 1200px !important;
+    margin: 0 auto !important;
+    padding: 40px 20px !important;
+  }
+  .fr-list {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)) !important;
+    gap: 20px !important;
+    margin-top: 20px !important;
+  }
+}
+
+/* Desktop-only premium shell and widescreen refinements. Mobile remains governed by existing styles. */
+@media (min-width: 1024px) {
+  :root {
+    --sidebar-width: 260px;
+    --header-height: 68px;
+    --content-max-width: 1280px;
+    --card-radius: 20px;
+    --gap-grid: 24px;
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
+    --shadow-hover: 0 4px 8px rgba(0,0,0,0.10), 0 16px 40px rgba(0,0,0,0.12);
+    --shadow-sidebar: 2px 0 20px rgba(0,0,0,0.08);
+    --glass-bg: rgba(255,255,255,0.72);
+    --glass-bg-dark: rgba(18,18,24,0.80);
+    --glass-blur: blur(16px) saturate(180%);
+    --accent: #10b981;
+    --ns-bg: var(--ns-page-grad-start, #f8fafc);
+  }
+
+  html.dark {
+    --glass-bg: var(--glass-bg-dark);
+  }
+
+  .fitscan-app-shell {
+    min-height: 100vh;
+    width: 100%;
+    background: var(--ns-bg);
+    color: var(--ns-on-surface);
+    align-items: stretch;
+  }
+
+  .fitscan-app-sidebar {
+    width: var(--sidebar-width);
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    flex-direction: column;
+    padding: 24px 16px;
+    border-right: 1px solid var(--ns-border-light);
+    background: var(--ns-card-bg);
+    box-shadow: var(--shadow-sidebar);
+    z-index: 120;
+  }
+
+  .fitscan-app-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 12px 28px;
+  }
+
+  .fitscan-app-brand-mark {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    color: #fff;
+    background: linear-gradient(135deg, #10b981, #059669);
+    box-shadow: 0 10px 24px rgba(16,185,129,0.26);
+  }
+
+  .fitscan-app-brand strong {
+    font-family: var(--font-headline);
+    font-size: 1.25rem;
+    letter-spacing: -0.04em;
+  }
+
+  .fitscan-app-brand strong span {
+    color: #10b981;
+  }
+
+  .fitscan-app-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .sidebar-nav-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 16px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--ns-on-surface-var);
+    font-size: 0.92rem;
+    font-weight: 750;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .sidebar-nav-link:hover {
+    background: rgba(16,185,129,0.08);
+    color: #10b981;
+    transform: translateX(3px);
+  }
+
+  .sidebar-nav-link.active {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(16,185,129,0.28);
+  }
+
+  .sidebar-nav-link.active::before {
+    content: '';
+    position: absolute;
+    left: -16px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 60%;
+    background: #10b981;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .fitscan-app-user-card {
+    margin-top: auto;
+    padding: 16px;
+    border: 1px solid var(--ns-border-light);
+    border-radius: 18px;
+    background: linear-gradient(180deg, var(--ns-card-bg-alt), var(--ns-card-bg));
+    box-shadow: var(--shadow-card);
+  }
+
+  .fitscan-app-user-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .fitscan-app-avatar,
+  .fitscan-header-avatar {
+    width: 40px;
+    height: 40px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    border: 0;
+    font-weight: 850;
+  }
+
+  .fitscan-app-user-row strong,
+  .fitscan-app-user-row em {
+    display: block;
+  }
+
+  .fitscan-app-user-row strong {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9rem;
+  }
+
+  .fitscan-app-user-row em {
+    color: var(--ns-outline);
+    font-size: 0.74rem;
+    font-style: normal;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .fitscan-app-quota span {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--ns-outline);
+    font-size: 0.76rem;
+    font-weight: 800;
+  }
+
+  .fitscan-app-quota i,
+  .fitscan-header-quota i {
+    display: block;
+    height: 7px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(16,185,129,0.12);
+  }
+
+  .fitscan-app-quota b,
+  .fitscan-header-quota b {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #10b981, #34d399);
+  }
+
+  .fitscan-app-upgrade,
+  .fitscan-app-logout {
+    width: 100%;
+    margin-top: 12px;
+    min-height: 38px;
+    border-radius: 12px;
+    font-weight: 850;
+    cursor: pointer;
+  }
+
+  .fitscan-app-upgrade {
+    border: 0;
+    color: #fff;
+    background: linear-gradient(135deg, #10b981, #059669);
+    box-shadow: 0 8px 20px rgba(16,185,129,0.25);
+  }
+
+  .fitscan-app-logout {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 1px solid var(--ns-border-light);
+    color: var(--ns-on-surface-var);
+    background: transparent;
+  }
+
+  .fitscan-app-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .top-header {
+    height: var(--header-height);
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 0 32px;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-bottom: 1px solid var(--ns-border-light);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .top-header.scrolled {
+    box-shadow: 0 1px 0 var(--ns-border-light), 0 4px 24px rgba(0,0,0,0.06);
+  }
+
+  .fitscan-app-title span {
+    font-family: var(--font-headline);
+    font-size: 1.18rem;
+    font-weight: 850;
+    letter-spacing: -0.03em;
+  }
+
+  .fitscan-header-quota {
+    width: min(360px, 34vw);
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--ns-border-light);
+    background: var(--ns-card-bg);
+    box-shadow: var(--shadow-card);
+    color: var(--ns-on-surface-var);
+    font-size: 0.82rem;
+    font-weight: 850;
+  }
+
+  .fitscan-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .fitscan-header-actions > button {
+    width: 40px;
+    height: 40px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 14px;
+    border: 1px solid var(--ns-border-light);
+    background: var(--ns-card-bg);
+    color: var(--ns-on-surface);
+    box-shadow: var(--shadow-card);
+  }
+
+  .fitscan-app-main {
+    width: 100%;
+    min-height: calc(100vh - var(--header-height));
+    padding: 0;
+  }
+
+  .fitscan-home-nav,
+  .bottom-nav-bar {
+    display: none !important;
+  }
+
+  .fitscan-app-main .fitscan-desktop-sidebar {
+    display: none !important;
+  }
+
+  .fitscan-app-main .fitscan-home-page {
+    display: block !important;
+    min-height: auto !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  .fitscan-app-main .fitscan-main-dashboard {
+    padding: 0 !important;
+    min-height: auto !important;
+  }
+
+  .fitscan-dashboard-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: auto auto auto !important;
+    gap: var(--gap-grid) !important;
+    padding: 32px !important;
+    max-width: var(--content-max-width) !important;
+    margin: 0 auto !important;
+    align-items: stretch !important;
+  }
+
+  .fitscan-dashboard-grid > .fitscan-column {
+    display: contents !important;
+  }
+
+  .fitscan-week-card {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
+  }
+
+  .fitscan-action-card {
+    grid-column: 2 !important;
+    grid-row: 1 !important;
+  }
+
+  .fitscan-score-card {
+    grid-column: 1 !important;
+    grid-row: 2 !important;
+  }
+
+  .fitscan-recent-card {
+    grid-column: 2 !important;
+    grid-row: 2 !important;
+  }
+
+  .fitscan-dashboard-grid .hidden.lg\:block {
+    display: block !important;
+    grid-column: 1 / -1 !important;
+    grid-row: 3 !important;
+  }
+
+  .fitscan-dashboard-grid > section,
+  .fitscan-dashboard-grid .hidden.lg\:block > div,
+  .compare-shell,
+  .history-phone-shell,
+  .streak-phone-shell,
+  .food-db-shell,
+  .profile-phone-shell,
+  .result-summary-card,
+  .result-facts-card,
+  .result-audit-card,
+  .trends-graph-container,
+  .stat-card-premium {
+    border-radius: var(--card-radius) !important;
+    border: 1px solid var(--ns-border-light) !important;
+    box-shadow: var(--shadow-card) !important;
+  }
+
+  .fitscan-dashboard-grid > section,
+  .fitscan-dashboard-grid .hidden.lg\:block > div {
+    padding: 28px !important;
+    background: var(--ns-card-bg) !important;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  .fitscan-dashboard-grid > section:hover,
+  .fitscan-dashboard-grid .hidden.lg\:block > div:hover,
+  .history-entry-card:hover,
+  .food-db-card:hover,
+  .compare-product-card:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: var(--shadow-hover) !important;
+  }
+
+  .fitscan-action-card {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 16px !important;
+  }
+
+  .fitscan-action-card button {
+    min-height: 144px !important;
+    border-radius: 16px !important;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+
+  .fitscan-action-card button:first-child {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+    color: white !important;
+    box-shadow: 0 4px 16px rgba(16,185,129,0.3) !important;
+  }
+
+  .fitscan-action-card button:nth-child(2):hover {
+    border-color: #10b981 !important;
+    color: #10b981 !important;
+    background: rgba(16,185,129,0.05) !important;
+  }
+
+  .fitscan-score-card {
+    background-image: radial-gradient(circle at 29% 50%, rgba(16,185,129,0.10) 0%, transparent 42%) !important;
+  }
+
+  .fitscan-macro-track span {
+    transform-origin: left center;
+  }
+
+  .compare-page,
+  .history-page,
+  .streak-page,
+  .food-db-page,
+  .profile-page,
+  .result-page,
+  .trends-page,
+  .scan-screen-wrapper {
+    padding: 32px !important;
+    background: transparent !important;
+    min-height: auto !important;
+  }
+
+  .compare-shell,
+  .history-phone-shell,
+  .streak-phone-shell,
+  .food-db-shell,
+  .profile-phone-shell {
+    width: 100% !important;
+    max-width: var(--content-max-width) !important;
+    margin: 0 auto !important;
+    padding: 32px !important;
+    background: var(--ns-card-bg) !important;
+  }
+
+  .compare-picker {
+    display: grid !important;
+    grid-template-columns: 300px 1fr !important;
+    gap: 28px !important;
+    align-items: start !important;
+  }
+
+  .compare-hero-copy,
+  .compare-search {
+    grid-column: 1 !important;
+  }
+
+  .compare-hero-copy {
+    position: sticky;
+    top: calc(var(--header-height) + 32px);
+    padding: 28px !important;
+    border-radius: var(--card-radius);
+    border: 1px solid var(--ns-border-light);
+    background: var(--ns-card-bg-alt);
+    box-shadow: var(--shadow-card);
+  }
+
+  .compare-search {
+    position: sticky;
+    top: calc(var(--header-height) + 210px);
+  }
+
+  .compare-product-list {
+    grid-column: 2 !important;
+    grid-row: 1 / span 4 !important;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)) !important;
+    gap: 16px !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .compare-product-card {
+    min-height: 132px !important;
+    grid-template-columns: 22px 54px minmax(0, 1fr) 48px !important;
+    align-items: start !important;
+    padding: 14px !important;
+    border-radius: 16px !important;
+  }
+
+  .compare-pagination {
+    grid-column: 2 !important;
+  }
+
+  .compare-content .flex.gap-4.overflow-x-auto {
+    display: flex !important;
+    justify-content: center !important;
+    flex-wrap: wrap !important;
+    gap: 24px !important;
+    overflow: visible !important;
+  }
+
+  .compare-content .flex.gap-4.overflow-x-auto > div {
+    width: 320px !important;
+    flex: 0 0 320px !important;
+    border-radius: var(--card-radius) !important;
+    box-shadow: var(--shadow-card) !important;
+  }
+
+  .history-search-bar {
+    max-width: 480px !important;
+    margin: 0 auto 32px !important;
+  }
+
+  .history-list {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+    gap: 20px !important;
+  }
+
+  .history-entry-card {
+    min-height: 116px !important;
+    align-items: flex-start !important;
+    padding: 20px !important;
+    border-radius: var(--card-radius) !important;
+    background: var(--ns-card-bg-alt) !important;
+    transition: transform 0.22s ease, box-shadow 0.22s ease;
+  }
+
+  .history-entry-value {
+    width: 42px !important;
+    height: 42px !important;
+    border-radius: 12px !important;
+    font-family: var(--font-headline) !important;
+  }
+
+  .food-db-shell {
+    display: grid !important;
+    grid-template-columns: 320px 1fr !important;
+    gap: 28px !important;
+    align-items: start !important;
+  }
+
+  .food-db-header {
+    grid-column: 1 / -1 !important;
+  }
+
+  .food-db-hero,
+  .food-db-search,
+  .food-db-error {
+    grid-column: 1 !important;
+  }
+
+  .food-db-hero,
+  .food-db-search {
+    position: sticky !important;
+  }
+
+  .food-db-hero {
+    top: calc(var(--header-height) + 32px) !important;
+    padding: 28px !important;
+    border-radius: var(--card-radius) !important;
+  }
+
+  .food-db-search {
+    top: calc(var(--header-height) + 220px) !important;
+  }
+
+  .food-db-list {
+    grid-column: 2 !important;
+    grid-row: 2 / span 4 !important;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) !important;
+    gap: 16px !important;
+    margin-top: 0 !important;
+  }
+
+  .food-db-card {
+    min-height: 142px !important;
+    display: flex !important;
+    align-items: flex-start !important;
+    flex-direction: column !important;
+    padding: 20px !important;
+    border-radius: 16px !important;
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  }
+
+  .food-db-mark {
+    width: 64px !important;
+    height: 64px !important;
+  }
+
+  .profile-phone-shell {
+    display: grid !important;
+    grid-template-columns: 320px 1fr !important;
+    gap: 28px !important;
+    align-items: start !important;
+  }
+
+  .profile-topbar {
+    grid-column: 1 / -1 !important;
+  }
+
+  .profile-hero {
+    position: sticky !important;
+    top: calc(var(--header-height) + 32px) !important;
+    grid-column: 1 !important;
+    padding: 32px 24px !important;
+    border-radius: var(--card-radius) !important;
+    border: 1px solid var(--ns-border-light) !important;
+    background: var(--ns-card-bg-alt) !important;
+    box-shadow: var(--shadow-card) !important;
+  }
+
+  .profile-avatar {
+    width: 96px !important;
+    height: 96px !important;
+    border: 3px solid #10b981 !important;
+    box-shadow: 0 0 0 6px rgba(16,185,129,0.12) !important;
+  }
+
+  .profile-phone-shell > .profile-menu-section {
+    grid-column: 2 !important;
+  }
+
+  .profile-menu-group {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+  }
+
+  .profile-menu-action,
+  .profile-theme-toggle {
+    border-radius: 16px !important;
+    min-height: 62px !important;
+  }
+
+  .streak-phone-shell {
+    display: grid !important;
+    grid-template-columns: 320px 1fr !important;
+    gap: 28px !important;
+  }
+
+  .streak-page-header {
+    grid-column: 1 / -1 !important;
+  }
+
+  .streak-stats-grid {
+    grid-column: 1 !important;
+    position: sticky !important;
+    top: calc(var(--header-height) + 32px) !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .leaderboard-card {
+    grid-column: 2 !important;
+    margin-top: 0 !important;
+    min-height: 520px !important;
+  }
+
+  .streak-stat-tile.fire {
+    background: linear-gradient(135deg, rgba(253,118,26,0.08), rgba(245,158,11,0.08)) !important;
+    border-color: rgba(253,118,26,0.2) !important;
+  }
+
+  .result-page {
+    max-width: 1400px !important;
+    margin: 0 auto !important;
+  }
+
+  .result-content {
+    display: grid !important;
+    grid-template-columns: 380px 1fr !important;
+    gap: 28px !important;
+    align-items: start !important;
+  }
+
+  .result-summary-card,
+  .result-primary-button.btn-primary,
+  .result-tabs,
+  .result-facts-card {
+    grid-column: 1 !important;
+  }
+
+  .result-summary-card {
+    position: sticky !important;
+    top: calc(var(--header-height) + 24px) !important;
+  }
+
+  .result-section {
+    grid-column: 2 !important;
+    margin-top: 0 !important;
+  }
+
+  .result-bottom-button {
+    grid-column: 2 !important;
+    max-width: 360px !important;
+    justify-self: center !important;
+  }
+
+  .result-audit-card {
+    padding: 0 !important;
+    transition: transform 0.22s ease, box-shadow 0.22s ease;
+  }
+
+  .trends-page {
+    max-width: var(--content-max-width) !important;
+    margin: 0 auto !important;
+    padding: 32px !important;
+  }
+
+  .trends-content {
+    display: grid !important;
+    grid-template-columns: 320px 1fr !important;
+    gap: 28px !important;
+    align-items: start !important;
+  }
+
+  .trends-stats-grid,
+  .trends-filter-bar,
+  .custom-range-inputs {
+    grid-column: 1 !important;
+  }
+
+  .trends-stats-grid {
+    position: sticky !important;
+    top: calc(var(--header-height) + 32px) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 14px !important;
+  }
+
+  .stat-card-premium {
+    padding: 20px 22px !important;
+    border-radius: 16px !important;
+    background: var(--ns-card-bg) !important;
+  }
+
+  .trends-filter-bar {
+    position: sticky !important;
+    top: calc(var(--header-height) + 360px) !important;
+    margin: 0 !important;
+  }
+
+  .trends-graph-container {
+    grid-column: 2 !important;
+    grid-row: 1 / span 4 !important;
+    min-height: 520px !important;
+    padding: 32px !important;
+  }
+
+  .trends-graph-container .recharts-wrapper {
+    min-height: 420px !important;
+  }
+
+  .empty-state,
+  .history-state,
+  .food-db-empty,
+  .compare-empty,
+  .trends-empty {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 64px 32px !important;
+    gap: 16px !important;
+    text-align: center !important;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible {
+    outline: 2px solid #10b981 !important;
+    outline-offset: 3px !important;
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--ns-border-light) 25%, rgba(255,255,255,0.5) 50%, var(--ns-border-light) 75%) !important;
+    background-size: 200% 100% !important;
+    animation: shimmer 1.5s infinite !important;
+    border-radius: 8px !important;
+  }
+}
+
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+  .fitscan-dashboard-grid > *:nth-child(1) { animation: cardEnter 0.5s 0.05s ease both; }
+  .fitscan-dashboard-grid > *:nth-child(2) { animation: cardEnter 0.5s 0.10s ease both; }
+  .fitscan-dashboard-grid > *:nth-child(3) { animation: cardEnter 0.5s 0.15s ease both; }
+  .fitscan-dashboard-grid > *:nth-child(4) { animation: cardEnter 0.5s 0.20s ease both; }
+  .fitscan-dashboard-grid > *:nth-child(5) { animation: cardEnter 0.5s 0.25s ease both; }
+
+  .fitscan-macro-track span,
+  .result-macro-item {
+    animation: cardEnter 0.55s ease both;
+  }
+
+  @keyframes cardEnter {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
 }

@@ -1,6 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { authLimiter } = require('../middleware/rateLimiter');
+const { validateProfileUpdate, validateDetailsUpdate } = require('../middleware/profileValidator');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key';
@@ -109,9 +111,17 @@ const hydrateUserMedicalProfile = async (pool, user) => {
   };
 };
 
-// Middleware to authenticate
+// Cookie config — centralised so it's consistent across all auth routes
+const COOKIE_OPTIONS = {
+  httpOnly: true,                         // inaccessible to JS — blocks XSS token theft
+  secure: process.env.NODE_ENV === 'production', // HTTPS-only in prod; allows HTTP in local dev
+  sameSite: 'strict',                     // never sent in cross-site requests
+  maxAge: 30 * 24 * 60 * 60 * 1000,      // 30 days in milliseconds
+};
+
+// Middleware to authenticate — reads JWT from HttpOnly cookie
 const authenticate = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
+  const token = req.cookies?.token;
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
@@ -165,7 +175,7 @@ async function updateStreak(pool, userId) {
 }
 
 // Register
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   const { email, password, name } = req.body;
   try {
     const userRes = await req.pool.query('SELECT * FROM users WHERE email = $1', [email]);
@@ -180,8 +190,10 @@ router.post('/register', async (req, res) => {
     const { points, streak } = await updateStreak(req.pool, user.id);
     const hydratedUser = await hydrateUserMedicalProfile(req.pool, { ...user, isPremium: user.is_premium, subscriptionExpiresAt: user.subscription_expires_at, imageScansUsed: user.image_scans_used, subscriptionPlan: user.subscription_plan, points, streak });
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: hydratedUser });
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    // Set JWT as an HttpOnly cookie — never exposed to frontend JavaScript
+    res.cookie('token', token, COOKIE_OPTIONS);
+    res.json({ user: hydratedUser });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
@@ -189,7 +201,7 @@ router.post('/register', async (req, res) => {
 });
 
 // Login
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
   try {
     const userRes = await req.pool.query('SELECT * FROM users WHERE email = $1', [email]);
@@ -217,8 +229,10 @@ router.post('/login', async (req, res) => {
       subscriptionPlan: user.subscription_plan
     });
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: hydratedUser, deletionCancelled });
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    // Set JWT as an HttpOnly cookie — never exposed to frontend JavaScript
+    res.cookie('token', token, COOKIE_OPTIONS);
+    res.json({ user: hydratedUser, deletionCancelled });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
@@ -226,7 +240,7 @@ router.post('/login', async (req, res) => {
 });
 
 // Google OAuth
-router.post('/google', async (req, res) => {
+router.post('/google', authLimiter, async (req, res) => {
   const { email, name, googleId } = req.body;
   try {
     let userRes = await req.pool.query('SELECT * FROM users WHERE email = $1', [email]);
@@ -256,12 +270,24 @@ router.post('/google', async (req, res) => {
       subscriptionPlan: user.subscription_plan
     });
 
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: hydratedUser, deletionCancelled: typeof deletionCancelled !== 'undefined' ? deletionCancelled : false });
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
+    // Set JWT as an HttpOnly cookie — never exposed to frontend JavaScript
+    res.cookie('token', token, COOKIE_OPTIONS);
+    res.json({ user: hydratedUser, deletionCancelled: typeof deletionCancelled !== 'undefined' ? deletionCancelled : false });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Google login failed' });
   }
+});
+
+// Logout — clears the HttpOnly auth cookie
+router.post('/logout', (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+  });
+  res.json({ success: true });
 });
 
 // Get current user (session restoration)
@@ -292,8 +318,8 @@ router.get('/me', authenticate, async (req, res) => {
 });
 
 // Update Profile
-router.put('/profile', authenticate, async (req, res) => {
-  const { profile } = req.body;
+router.put('/profile', authenticate, validateProfileUpdate, async (req, res) => {
+  const { profile } = req.validatedBody;
   try {
     const userRes = await req.pool.query(
       'SELECT profile FROM users WHERE id = $1',
@@ -337,8 +363,8 @@ router.put('/profile', authenticate, async (req, res) => {
 });
 
 // Update personal details from profile page
-router.put('/details', authenticate, async (req, res) => {
-  const { name, profile } = req.body;
+router.put('/details', authenticate, validateDetailsUpdate, async (req, res) => {
+  const { name, profile } = req.validatedBody;
   try {
     const userRes = await req.pool.query(
       'SELECT profile FROM users WHERE id = $1',

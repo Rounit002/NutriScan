@@ -332,7 +332,9 @@ export default function Onboarding({ onComplete, initialProfile, authToken, onBa
 
     if (pendingSignUp) {
       try {
-        const url = pendingSignUp.type === 'google' ? 'http://localhost:5000/auth/google' : 'http://localhost:5000/auth/register';
+        const url = pendingSignUp.type === 'google'
+          ? `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/google`
+          : `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/register`;
         const body = pendingSignUp.type === 'google' 
           ? { email: pendingSignUp.email, name: pendingSignUp.name, googleId: pendingSignUp.googleId }
           : { name: pendingSignUp.name, email: pendingSignUp.email, password: pendingSignUp.password };
@@ -340,18 +342,36 @@ export default function Onboarding({ onComplete, initialProfile, authToken, onBa
         const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include', // server sets the HttpOnly cookie on this response
           body: JSON.stringify(body)
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
 
-        const detailsRes = await fetch('http://localhost:5000/auth/details', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.token}` },
-          body: JSON.stringify({ profile: finalProfile })
-        });
+        // Cookie is now set — save profile details using cookie auth
+        const sanitizedProfile = {
+          gender: finalProfile.gender,
+          weight: Number(finalProfile.weight) || null,
+          height: Number(finalProfile.height) || null,
+          dateOfBirth: finalProfile.dateOfBirth || '',
+          conditions: finalProfile.conditions || [],
+          goals: finalProfile.goals || [],
+        };
+
+        const detailsRes = await fetch(
+          `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/details`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ profile: sanitizedProfile })
+          }
+        );
         const detailsData = await detailsRes.json();
-        onLogin(detailsData.user, data.token);
+        if (!detailsRes.ok) {
+          throw new Error(detailsData.error || detailsData.message || 'Failed to save profile details.');
+        }
+        onLogin(detailsData.user, null); // token is null — it lives in the cookie
       } catch (err) {
         console.error('Registration failed:', err);
         setError(err.message || 'Registration failed');

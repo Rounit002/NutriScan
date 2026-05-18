@@ -91,11 +91,11 @@ export default function Trends({ authToken, onNavigate }) {
 
   useEffect(() => {
     const fetchHistory = async () => {
-    if (!authToken) return;
     try {
-      const res = await fetch('http://localhost:5000/scans', {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/scans`,
+        { credentials: 'include' }
+      );
       const data = await res.json();
       setHistory(data);
     } catch (err) {
@@ -106,7 +106,7 @@ export default function Trends({ authToken, onNavigate }) {
     };
 
     fetchHistory();
-  }, [authToken]);
+  }, []);
 
   const processedData = useMemo(() => {
     if (!history.length) return [];

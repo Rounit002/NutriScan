@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { Camera, Upload, Barcode, ArrowLeft, Mic, Zap, Search, History, Image as ImageIcon, RotateCcw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import ScanQuotaBar from './ScanQuotaBar';
 
 export default function Home({ onImageSelected, onBack, onNavigateBarcode }) {
   const { t } = useTranslation();
@@ -12,6 +13,13 @@ export default function Home({ onImageSelected, onBack, onNavigateBarcode }) {
   const [isNoteExpanded, setIsNoteExpanded] = useState(false);
   const [note, setNote] = useState("");
   const [toast, setToast] = useState(null);
+  const [quotaDepleted, setQuotaDepleted] = useState(false);
+
+  const handleQuotaChecked = (quotaData) => {
+    const used = quotaData.used ?? 0;
+    const limit = quotaData.limit ?? 20;
+    setQuotaDepleted(used >= limit);
+  };
 
   // Initialize Camera Preview
   useEffect(() => {
@@ -40,6 +48,10 @@ export default function Home({ onImageSelected, onBack, onNavigateBarcode }) {
   }, []);
 
   const handleFileChange = (e) => {
+    if (quotaDepleted) {
+      showToast("Scan limit reached. Please upgrade your plan.", "error");
+      return;
+    }
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -62,6 +74,10 @@ export default function Home({ onImageSelected, onBack, onNavigateBarcode }) {
   };
 
   const capturePhoto = () => {
+    if (quotaDepleted) {
+      showToast("Scan limit reached. Please upgrade your plan.", "error");
+      return;
+    }
     if (hasCameraAccess && videoRef.current) {
       const canvas = document.createElement('canvas');
       canvas.width = videoRef.current.videoWidth;
@@ -79,6 +95,10 @@ export default function Home({ onImageSelected, onBack, onNavigateBarcode }) {
   };
 
   const openGallery = () => {
+    if (quotaDepleted) {
+      showToast("Scan limit reached. Please upgrade your plan.", "error");
+      return;
+    }
     if (fileInputRef.current) {
       fileInputRef.current.removeAttribute('capture');
       fileInputRef.current.click();
@@ -91,7 +111,7 @@ export default function Home({ onImageSelected, onBack, onNavigateBarcode }) {
   };
 
   return (
-    <div className="scan-screen-wrapper">
+    <div className="scan-screen-wrapper page-transition">
       {/* Toast Notification */}
       {toast && (
         <div className="scan-toast" style={{ background: toast.type === 'error' ? 'var(--ns-error)' : 'var(--ns-success)' }}>
@@ -180,6 +200,7 @@ export default function Home({ onImageSelected, onBack, onNavigateBarcode }) {
 
       {/* Bottom Interface */}
       <footer className="scan-bottom-bar">
+        <ScanQuotaBar onQuotaChecked={handleQuotaChecked} />
         {/* Note Field (Expandable) */}
         <div
           className={`scan-note-field ${isNoteExpanded ? 'is-expanded' : ''}`}
