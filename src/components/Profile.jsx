@@ -1,16 +1,19 @@
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  AlertTriangle,
   ArrowLeft,
   Camera,
   ChevronRight,
   Check,
+  Clock,
   Crown,
   Edit3,
   Globe2,
   HeartPulse,
   Languages,
   LifeBuoy,
+  Loader2,
   LogOut,
   Mail,
   Moon,
@@ -169,11 +172,11 @@ function ProfileAction({ label, icon: Icon, onClick, danger = false }) {
     >
       {Icon && (
         <span className="profile-action-icon" aria-hidden="true">
-          <Icon size={17} />
+          <Icon size={18} />
         </span>
       )}
       <span>{label}</span>
-      <ChevronRight size={16} />
+      <ChevronRight size={15} />
     </button>
   );
 }
@@ -437,6 +440,11 @@ export function MedicalProfilePage({
   };
 
   const saveMedicalProfile = async () => {
+    if (isOnboarding) {
+      onDetailsSaved?.({ profile: { conditions: selectedIssues } });
+      return;
+    }
+
     setIsSaving(true);
     setError('');
 
@@ -456,7 +464,7 @@ export function MedicalProfilePage({
       if (!response.ok) throw new Error('Save failed');
       const data = await response.json();
       onDetailsSaved?.(data.user);
-      if (!isOnboarding) onBack();
+      onBack();
     } catch (saveError) {
       console.error(saveError);
       setError('Could not save your medical profile. Please try again.');
@@ -600,6 +608,11 @@ export function HealthGoalsPage({
   };
 
   const saveHealthGoals = async () => {
+    if (isOnboarding) {
+      onDetailsSaved?.({ profile: { goals: selectedGoals } });
+      return;
+    }
+
     setIsSaving(true);
     setError('');
 
@@ -619,7 +632,7 @@ export function HealthGoalsPage({
       if (!response.ok) throw new Error('Save failed');
       const data = await response.json();
       onDetailsSaved?.(data.user);
-      if (!isOnboarding) onBack();
+      onBack();
     } catch (saveError) {
       console.error(saveError);
       setError('Could not save your health goals. Please try again.');
@@ -709,6 +722,12 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
   const [language, setLanguage] = useState(() => i18n.resolvedLanguage || i18n.language || 'en');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteScheduledSuccess, setDeleteScheduledSuccess] = useState(false);
+  const [scheduledDeletionAt, setScheduledDeletionAt] = useState(() => userAuth?.scheduledDeletionAt || null);
+  const [isCancellingDeletion, setIsCancellingDeletion] = useState(false);
   const fileInputRef = useRef(null);
 
   const ageLabel = userProfile?.age ? `${userProfile.age}` : t('age');
@@ -723,15 +742,165 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
       .join('') || 'FS';
   }, [displayName]);
 
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      if (window.Razorpay) {
+        resolve(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handlePayment = async (planType) => {
+    setIsProcessingPayment(true);
+    try {
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        throw new Error('Razorpay SDK failed to load');
+      }
+
+      const orderRes = await fetch('http://localhost:5000/api/payment/create-order', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}` 
+        },
+        body: JSON.stringify({ planType })
+      });
+      if (!orderRes.ok) throw new Error('Failed to create order');
+      const order = await orderRes.json();
+
+      const options = {
+        key: order.key_id,
+        amount: order.amount,
+        currency: order.currency,
+        name: "FitScan",
+        description: planType === 'family' ? "Family Plan Upgrade" : "Basic Plan Upgrade",
+        order_id: order.order_id,
+        handler: async function (response) {
+          try {
+            const verifyRes = await fetch('http://localhost:5000/api/payment/verify', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${authToken}`
+              },
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+                planType
+              })
+            });
+            if (verifyRes.ok) {
+              alert(`Payment successful! Welcome to the ${planType === 'family' ? 'Family' : 'Basic'} Plan.`);
+              setModal(null);
+              if (userAuth) {
+                 const updatedAuth = { ...userAuth, isPremium: true };
+                 onDetailsSaved?.(updatedAuth);
+              }
+            } else {
+              alert('Payment verification failed.');
+            }
+          } catch (err) {
+            console.error('Verify error:', err);
+            alert('Payment verification failed.');
+          }
+        },
+        prefill: {
+          name: userProfile?.name || "",
+          email: userAuth?.email || ""
+        },
+        theme: {
+          color: "#4B6F44"
+        }
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response) {
+        console.error('Payment failed', response.error);
+        alert('Payment failed: ' + response.error.description);
+      });
+      rzp.open();
+    } catch (err) {
+      console.error(err);
+      alert(err.message || 'Payment initiation failed');
+    } finally {
+      setIsProcessingPayment(false);
+    }
+  };
+
+  // Calculate remaining days for scheduled deletion
+  const deletionCountdown = useMemo(() => {
+    if (!scheduledDeletionAt) return null;
+    const now = new Date();
+    const target = new Date(scheduledDeletionAt);
+    const diff = target - now;
+    if (diff <= 0) return { days: 0, hours: 0, label: 'soon' };
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    if (days > 0) return { days, hours, label: `${days} day${days !== 1 ? 's' : ''}` };
+    return { days: 0, hours, label: `${hours} hour${hours !== 1 ? 's' : ''}` };
+  }, [scheduledDeletionAt]);
+
   const handleLanguageChange = (nextLanguageCode) => {
     i18n.changeLanguage(nextLanguageCode);
     setLanguage(nextLanguageCode);
     localStorage.setItem('fitscan_language', nextLanguageCode);
   };
 
-  const handleDelete = () => {
-    if (window.confirm('Delete your profile data? This will reset your health profile.')) {
-      onDelete();
+  const handleDeleteAccount = async () => {
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      if (!authToken) throw new Error('Not authenticated');
+      const response = await fetch('http://localhost:5000/auth/account', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body.error || 'Deletion failed');
+      }
+      // Show the success popup briefly, then log out
+      setShowDeleteConfirm(false);
+      setDeleteScheduledSuccess(true);
+      setTimeout(() => {
+        setDeleteScheduledSuccess(false);
+        onDelete();
+      }, 4000);
+    } catch (err) {
+      console.error('[Account deletion error]', err);
+      setDeleteError(err.message || 'Could not schedule account deletion. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleCancelDeletion = async () => {
+    setIsCancellingDeletion(true);
+    try {
+      if (!authToken) throw new Error('Not authenticated');
+      const response = await fetch('http://localhost:5000/auth/cancel-deletion', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Cancel failed');
+      }
+      setScheduledDeletionAt(null);
+    } catch (err) {
+      console.error('[Cancel deletion error]', err);
+    } finally {
+      setIsCancellingDeletion(false);
     }
   };
 
@@ -861,10 +1030,17 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
             <strong>{displayName}</strong>
             <span>{ageLabel}</span>
           </div>
-          <button className="profile-upgrade-button" type="button" onClick={() => setModal('upgrade')}>
-            <Crown size={17} />
-            <span>{t('upgrade')}</span>
-          </button>
+          {userAuth?.isPremium ? (
+            <button className="profile-upgrade-button premium" type="button" onClick={() => setModal('family')}>
+              <Crown size={17} />
+              <span>Family Plan Active</span>
+            </button>
+          ) : (
+            <button className="profile-upgrade-button" type="button" onClick={() => setModal('family')}>
+              <Crown size={17} />
+              <span>{t('upgrade')}</span>
+            </button>
+          )}
         </section>
 
         <ProfileSection title={t('account')}>
@@ -872,7 +1048,7 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
           <ProfileAction label={`${t('language')}: ${profileLanguages.find((option) => option.code === language)?.label || 'English'}`} icon={Languages} onClick={() => setModal('language')} />
           <div className="profile-theme-toggle" onClick={toggleTheme} role="button" tabIndex={0} aria-label={t('dark_mode')}>
             <span className="profile-action-icon" aria-hidden="true">
-              <Moon size={17} />
+              <Moon size={18} />
             </span>
             <span>{t('dark_mode')}</span>
             <span className={`profile-theme-switch${isDark ? ' is-active' : ''}`} aria-hidden="true" />
@@ -882,7 +1058,7 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
         <ProfileSection title={t('goals_tracking')}>
           <ProfileAction label={t('edit_medical_profile')} icon={HeartPulse} onClick={() => setView('medical')} />
           <ProfileAction label={t('edit_health_goal')} icon={Sparkles} onClick={() => setView('goals')} />
-          <ProfileAction label={t('upgrade_family_plan')} icon={Crown} onClick={() => setModal('family')} />
+          <ProfileAction label={userAuth?.isPremium ? t('manage_family_plan', 'Manage Family Plan') : t('upgrade_family_plan')} icon={Crown} onClick={() => setModal('family')} />
         </ProfileSection>
 
         <ProfileSection title={t('support_legal')}>
@@ -894,21 +1070,106 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
 
         <ProfileSection title={t('account_action')}>
           <ProfileAction label={t('logout')} icon={LogOut} onClick={onLogout} />
-          <ProfileAction label={t('delete_account')} icon={Trash2} onClick={handleDelete} danger />
+          <ProfileAction label={scheduledDeletionAt ? 'Deletion Scheduled' : t('delete_account')} icon={Trash2} onClick={() => { setDeleteError(''); setShowDeleteConfirm(true); }} danger />
         </ProfileSection>
+
+        {scheduledDeletionAt && deletionCountdown && (
+          <div className="deletion-scheduled-banner">
+            <div className="deletion-banner-icon">
+              <Clock size={20} />
+            </div>
+            <div className="deletion-banner-text">
+              <strong>Account deletion scheduled</strong>
+              <span>Your account will be permanently deleted in <b>{deletionCountdown.label}</b>. Log in again or tap Cancel to keep your account.</span>
+            </div>
+            <button
+              type="button"
+              className="deletion-banner-cancel"
+              onClick={handleCancelDeletion}
+              disabled={isCancellingDeletion}
+            >
+              {isCancellingDeletion ? 'Cancelling…' : 'Cancel Deletion'}
+            </button>
+          </div>
+        )}
       </section>
 
-      {modal === 'upgrade' && (
-        <ProfileModal title="Upgrade" onClose={() => setModal(null)}>
-          <p>Unlock deeper insights, unlimited scan history, family tracking, and priority recommendations.</p>
-          <button className="profile-modal-primary" type="button" onClick={() => setModal('family')}>View Family Plan</button>
-        </ProfileModal>
-      )}
-
       {modal === 'family' && (
-        <ProfileModal title="Family Plan" onClose={() => setModal(null)}>
-          <p>Add family members, compare health goals, and track everyone from one FitScan profile.</p>
-          <button className="profile-modal-primary" type="button" onClick={() => setModal(null)}>Coming Soon</button>
+        <ProfileModal title="Upgrade Your Plan" onClose={() => setModal(null)}>
+          <p className="profile-upgrade-subtitle">Choose the plan that fits your health goals.</p>
+          {!userAuth?.isPremium ? (
+            <div className="profile-plans-container">
+              {/* Basic Plan Card */}
+              <div className="profile-plan-card">
+                <div className="plan-header">
+                  <h3>Basic Plan</h3>
+                  <p className="plan-price">₹20 <span>/ 7 days</span></p>
+                </div>
+                <ul className="plan-features">
+                  <li><Check size={16} /> 20 AI Image Scans</li>
+                  <li><Check size={16} /> Free Text & Barcode</li>
+                  <li><Check size={16} /> Basic Nutrition Analysis</li>
+                </ul>
+                <button 
+                  className="profile-modal-primary outline" 
+                  type="button" 
+                  onClick={() => handlePayment('basic')}
+                  disabled={isProcessingPayment}
+                >
+                  {isProcessingPayment ? 'Processing...' : 'Get Basic'}
+                </button>
+              </div>
+
+              {/* Family Plan Card */}
+              <div className="profile-plan-card premium-card">
+                <div className="plan-badge">Most Popular</div>
+                <div className="plan-header">
+                  <h3>Family Plan</h3>
+                  <p className="plan-price">₹299 <span>/ month</span></p>
+                </div>
+                <ul className="plan-features">
+                  <li><Check size={16} /> Unlimited AI Scans</li>
+                  <li><Check size={16} /> Family Tracking</li>
+                  <li><Check size={16} /> Priority Support</li>
+                </ul>
+                <button 
+                  className="profile-modal-primary" 
+                  type="button" 
+                  onClick={() => handlePayment('family')}
+                  disabled={isProcessingPayment}
+                >
+                  {isProcessingPayment ? 'Processing...' : 'Get Family'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="profile-active-plan">
+              <div className="active-plan-header">
+                <Crown size={24} color="var(--ns-primary)" />
+                <h3>You are on the {userAuth?.subscriptionPlan === 'family' ? 'Family' : 'Basic'} Plan!</h3>
+              </div>
+              <div className="active-plan-stats">
+                {userAuth?.subscriptionPlan === 'basic' && (
+                  <div className="stat-row">
+                    <span>Image Scans Remaining:</span>
+                    <strong>{Math.max(0, 20 - (userAuth?.imageScansUsed || 0))} / 20</strong>
+                  </div>
+                )}
+                <div className="stat-row">
+                  <span>Expires On:</span>
+                  <strong>{userAuth?.subscriptionExpiresAt ? new Date(userAuth.subscriptionExpiresAt).toLocaleDateString() : 'N/A'}</strong>
+                </div>
+              </div>
+              <button 
+                className="profile-modal-primary" 
+                type="button" 
+                onClick={() => setModal(null)}
+                style={{ marginTop: '20px' }}
+              >
+                Manage Subscription
+              </button>
+            </div>
+          )}
         </ProfileModal>
       )}
 
@@ -940,6 +1201,75 @@ export default function Profile({ userProfile, userAuth, authToken, onBack, onDe
         <ProfileModal title="Privacy Policy" onClose={() => setModal(null)}>
           <p>Your profile and scan history are used to personalize recommendations and are protected by your account login.</p>
         </ProfileModal>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="delete-confirm-backdrop" role="dialog" aria-modal="true" aria-label="Delete account confirmation">
+          <div className="delete-confirm-card">
+            <div className="delete-confirm-icon-wrap">
+              <AlertTriangle size={32} />
+            </div>
+            <h2 className="delete-confirm-title">Delete Account?</h2>
+            <p className="delete-confirm-body">
+              Your account will be <strong>scheduled for permanent deletion</strong>. After <strong>7 days</strong>, all of the following will be irreversibly removed:
+            </p>
+            <ul className="delete-confirm-list">
+              <li>Your profile &amp; personal details</li>
+              <li>Medical conditions &amp; health goals</li>
+              <li>Scan history &amp; saved results</li>
+              <li>Feature requests &amp; votes</li>
+              <li>Your authentication account</li>
+            </ul>
+            <p className="delete-confirm-grace">
+              <Clock size={14} />
+              <span>You have <strong>7 days</strong> to change your mind. Simply <strong>log in again</strong> within 7 days to cancel the deletion and keep your account.</span>
+            </p>
+            {deleteError && (
+              <p className="delete-confirm-error">{deleteError}</p>
+            )}
+            <div className="delete-confirm-actions">
+              <button
+                type="button"
+                className="delete-confirm-cancel"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="delete-confirm-destroy"
+                onClick={handleDeleteAccount}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 size={16} className="delete-spinner" />
+                    Scheduling…
+                  </>
+                ) : (
+                  'Delete Permanently'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteScheduledSuccess && (
+        <div className="delete-confirm-backdrop" role="alert">
+          <div className="delete-scheduled-success-card">
+            <div className="delete-success-icon-wrap">
+              <Clock size={32} />
+            </div>
+            <h2 className="delete-success-title">Deletion Scheduled</h2>
+            <p className="delete-success-body">
+              Your account will be permanently deleted in <strong>7 days</strong>.
+              To cancel, simply <strong>log in again</strong> before then.
+            </p>
+            <p className="delete-success-redirect">Logging you out…</p>
+          </div>
+        </div>
       )}
     </div>
   );

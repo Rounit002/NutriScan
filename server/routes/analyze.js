@@ -1,5 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
 const formatUserConditions = (conditions) => {
   if (!Array.isArray(conditions) || conditions.length === 0) return 'None';
@@ -252,6 +255,45 @@ function normalizeResult(result) {
 // POST /api/analyze/image
 router.post('/image', async (req, res) => {
   const { imageBase64, userProfile } = req.body;
+  
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Authentication required for image scanning.' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  let userId;
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    userId = decoded.userId;
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid token.' });
+  }
+
+  // Check subscription limits
+  try {
+    const userRes = await req.pool.query(
+      'SELECT is_premium, subscription_plan, subscription_expires_at, image_scans_used FROM users WHERE id = $1',
+      [userId]
+    );
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    
+    const user = userRes.rows[0];
+    if (!user.is_premium) {
+      return res.status(403).json({ error: 'Image scanning requires an active subscription.' });
+    }
+    if (!user.subscription_expires_at || new Date(user.subscription_expires_at) < new Date()) {
+      return res.status(403).json({ error: 'Your subscription has expired. Please renew.' });
+    }
+    // Only basic plan has the 20 limit
+    if (user.subscription_plan === 'basic' && user.image_scans_used >= 20) {
+      return res.status(403).json({ error: 'You have reached the 20 image scan limit for your Basic plan. Please renew.' });
+    }
+  } catch (err) {
+    console.error('Error checking subscription:', err);
+    return res.status(500).json({ error: 'Database error checking subscription.' });
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) return res.status(500).json({ error: 'Gemini API key not configured on server.' });
@@ -316,6 +358,13 @@ Respond ONLY with valid JSON, no markdown:
   try {
     const text = await generateWithFallback(apiKey, geminiBody);
     const result = parseResponse(text);
+
+    // Increment scan count
+    await req.pool.query(
+      'UPDATE users SET image_scans_used = COALESCE(image_scans_used, 0) + 1 WHERE id = $1',
+      [userId]
+    );
+
     res.json(result);
   } catch (err) {
     console.error('[FitScan AI] Final error:', err.message);

@@ -67,21 +67,23 @@ function BottomNav({ onNavigate }) {
 
   return (
     <nav className="fitscan-home-nav" aria-label="Primary navigation">
-      <button className="is-active" type="button" aria-label="Home">
-        <HomeIcon size={18} />
-        <span>{t('home')}</span>
-      </button>
-      <button type="button" onClick={() => onNavigate('home')} aria-label="Scan product">
-        <Camera size={18} />
+      <div className="fitscan-nav-pill">
+        <button className="is-active" type="button" aria-label="Home" title={t('home')}>
+          <HomeIcon size={24} />
+          <span>{t('home')}</span>
+        </button>
+        <button type="button" onClick={() => onNavigate('compare')} aria-label="Comparison" title={t('compare')}>
+          <BarChart2 size={24} />
+          <span>{t('compare')}</span>
+        </button>
+        <button type="button" onClick={() => onNavigate('profile')} aria-label="Profile" title={t('profile')}>
+          <User size={24} />
+          <span>{t('profile')}</span>
+        </button>
+      </div>
+      <button className="fitscan-nav-scan" type="button" onClick={() => onNavigate('home')} aria-label="Scan product" title={t('scan')}>
+        <Camera size={28} />
         <span>{t('scan')}</span>
-      </button>
-      <button type="button" onClick={() => onNavigate('compare')} aria-label="Comparison">
-        <BarChart2 size={18} />
-        <span>{t('compare')}</span>
-      </button>
-      <button type="button" onClick={() => onNavigate('profile')} aria-label="Profile">
-        <User size={18} />
-        <span>{t('profile')}</span>
       </button>
     </nav>
   );

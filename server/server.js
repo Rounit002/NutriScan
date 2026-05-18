@@ -7,6 +7,7 @@ const authRoutes = require('./routes/auth');
 const scansRoutes = require('./routes/scans');
 const analyzeRoutes = require('./routes/analyze');
 const featuresRoutes = require('./routes/features');
+const paymentRoutes = require('./routes/payment');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -183,6 +184,11 @@ const initDb = async () => {
     await addColumnIfMissing('users', 'streak', 'INTEGER DEFAULT 0');
     await addColumnIfMissing('users', 'last_login_at', 'TIMESTAMP');
     await addColumnIfMissing('users', 'profile', 'JSONB');
+    await addColumnIfMissing('users', 'scheduled_deletion_at', 'TIMESTAMP');
+    await addColumnIfMissing('users', 'is_premium', 'BOOLEAN DEFAULT FALSE');
+    await addColumnIfMissing('users', 'subscription_expires_at', 'TIMESTAMP');
+    await addColumnIfMissing('users', 'image_scans_used', 'INTEGER DEFAULT 0');
+    await addColumnIfMissing('users', 'subscription_plan', "VARCHAR(50)");
     await addColumnIfMissing('user_medical_conditions', 'severity', "VARCHAR(20) NOT NULL DEFAULT 'Medium'");
     await addColumnIfMissing('user_medical_conditions', 'updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 
@@ -224,6 +230,40 @@ const initDb = async () => {
   }
 };
 
+// Purge accounts whose 7-day grace period has expired
+const purgeScheduledDeletions = async () => {
+  const client = await pool.connect();
+  try {
+    const expiredRes = await client.query(
+      `SELECT id FROM users WHERE scheduled_deletion_at IS NOT NULL AND scheduled_deletion_at <= NOW()`
+    );
+    if (expiredRes.rows.length === 0) return;
+
+    for (const row of expiredRes.rows) {
+      const userId = row.id;
+      try {
+        await client.query('BEGIN');
+        await client.query('DELETE FROM user_health_goals WHERE user_id = $1', [userId]);
+        await client.query('DELETE FROM user_medical_conditions WHERE user_id = $1', [userId]);
+        await client.query('DELETE FROM feature_requests WHERE user_id = $1', [userId]);
+        await client.query('DELETE FROM scans WHERE user_id = $1', [userId]);
+        await client.query('UPDATE product_database SET first_scanned_by = NULL WHERE first_scanned_by = $1', [userId]);
+        await client.query('UPDATE product_database SET last_scanned_by = NULL WHERE last_scanned_by = $1', [userId]);
+        await client.query('DELETE FROM users WHERE id = $1', [userId]);
+        await client.query('COMMIT');
+        console.log(`[Scheduled Deletion] User ${userId} permanently purged after grace period`);
+      } catch (innerErr) {
+        await client.query('ROLLBACK');
+        console.error(`[Scheduled Deletion] Failed to purge user ${userId}:`, innerErr);
+      }
+    }
+  } catch (err) {
+    console.error('[Scheduled Deletion] Cleanup job error:', err);
+  } finally {
+    client.release();
+  }
+};
+
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -238,6 +278,7 @@ app.use('/auth', authRoutes);
 app.use('/scans', scansRoutes);
 app.use('/api/analyze', analyzeRoutes);
 app.use('/features', featuresRoutes);
+app.use('/api/payment', paymentRoutes);
 
 app.get('/', (req, res) => {
   res.send('FitScan API is running');
@@ -255,6 +296,9 @@ app.listen(PORT, async () => {
     // Refresh flags on startup is already done inside initDb() line 216
     // Just start the interval for subsequent refreshes
     setInterval(refreshFoodDatabaseFlags, 5 * 60 * 1000);
+    // Run scheduled-deletion cleanup every hour
+    await purgeScheduledDeletions();
+    setInterval(purgeScheduledDeletions, 60 * 60 * 1000);
   } catch (error) {
     console.error('Critical failure during server startup:', error);
   }

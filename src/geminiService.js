@@ -3,10 +3,15 @@
 
 const BACKEND_URL = 'http://localhost:5000';
 
-export async function analyzeFoodImage(imageBase64, userProfile) {
+export async function analyzeFoodImage(imageBase64, userProfile, authToken) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+
   const response = await fetch(`${BACKEND_URL}/api/analyze/image`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ imageBase64, userProfile }),
   });
 

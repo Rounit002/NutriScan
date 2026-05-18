@@ -242,6 +242,76 @@ const upsertProductDatabase = async (pool, userId, scan) => {
   );
 };
 
+const mapOpenFoodFactsProduct = (product) => {
+  const productName = product.product_name || product.product_name_en || product.generic_name || product.generic_name_en || '';
+  const brands = product.brands || product.brands_tags?.join(', ') || 'Unknown Brand';
+  const code = product.code || product._id || '';
+
+  if (!productName.trim()) return null;
+
+  return {
+    id: `off-${code || normalizeProductKey(brands, productName)}`,
+    code,
+    product_name: productName,
+    brands,
+    ingredients_text: product.ingredients_text || product.ingredients_text_en || '',
+    ingredientsAnalysis: [],
+    nutriments: product.nutriments || {},
+    rawProductData: product,
+    image_url: product.image_front_small_url || product.image_front_url || product.image_small_url || product.image_url || null,
+    latest_score: null,
+    scan_count: 0,
+    source: 'open_food_facts',
+    created_at: null,
+    updated_at: null,
+  };
+};
+
+const searchOpenFoodFacts = async (search) => {
+  if (!search) return [];
+
+  const params = new URLSearchParams({
+    search_terms: search,
+    search_simple: '1',
+    action: 'process',
+    json: '1',
+    page_size: '40',
+    fields: [
+      'code',
+      'product_name',
+      'product_name_en',
+      'generic_name',
+      'generic_name_en',
+      'brands',
+      'brands_tags',
+      'ingredients_text',
+      'ingredients_text_en',
+      'nutriments',
+      'serving_size',
+      'serving_quantity',
+      'image_url',
+      'image_small_url',
+      'image_front_url',
+      'image_front_small_url',
+    ].join(','),
+  });
+
+  const response = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?${params.toString()}`, {
+    headers: {
+      'User-Agent': 'FitScan/1.0 (food database search)',
+      Accept: 'application/json',
+    },
+    signal: AbortSignal.timeout(9000),
+  });
+
+  if (!response.ok) throw new Error(`Open Food Facts search failed: ${response.status}`);
+
+  const data = await response.json();
+  return (Array.isArray(data.products) ? data.products : [])
+    .map(mapOpenFoodFactsProduct)
+    .filter(Boolean);
+};
+
 // Shared product database: products scanned by everyone on the platform.
 router.get('/database', async (req, res) => {
   const search = (req.query.search || '').trim();
@@ -275,7 +345,7 @@ router.get('/database', async (req, res) => {
       values
     );
 
-    const products = productsRes.rows
+    const localProducts = productsRes.rows
       .map((scan) => ({
         id: scan.id,
         product_name: scan.product_name,
@@ -289,10 +359,30 @@ router.get('/database', async (req, res) => {
         scan_count: 1,
         created_at: scan.created_at,
         updated_at: scan.created_at,
+        source: 'local_scans',
       }))
       .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 
-    res.json(products);
+    let onlineProducts = [];
+    if (search) {
+      try {
+        onlineProducts = await searchOpenFoodFacts(search);
+      } catch (openFoodError) {
+        console.error('[Food database] Open Food Facts search failed:', openFoodError.message);
+      }
+    }
+
+    const seen = new Set();
+    const mergedProducts = [...localProducts, ...onlineProducts].filter((product) => {
+      const key = product.code
+        ? `code:${product.code}`
+        : normalizeProductKey(product.brands, product.product_name);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    res.json(mergedProducts);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch product database' });

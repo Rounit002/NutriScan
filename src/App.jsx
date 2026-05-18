@@ -17,59 +17,6 @@ import Trends from './components/Trends';
 import { analyzeFoodImage, analyzeFoodText } from './geminiService';
 import { useTheme } from './components/ThemeToggle';
 
-/**
- * Downscale a base64 image to a small thumbnail for storage.
- * Returns a base64 JPEG string ~120x120px.
- * Falls back to the original base64 (truncated) if canvas downscaling fails.
- */
-function generateThumbnail(base64, maxSize = 120) {
-  return new Promise((resolve) => {
-    if (!base64 || typeof base64 !== 'string') {
-      console.warn('[Thumbnail] No base64 data provided');
-      return resolve(null);
-    }
-
-    // Safety timeout — resolve with the raw base64 if Image never loads
-    const timeout = setTimeout(() => {
-      console.warn('[Thumbnail] Timed out — using original image as fallback');
-      resolve(base64);
-    }, 5000);
-
-    try {
-      const img = new Image();
-      img.onload = () => {
-        clearTimeout(timeout);
-        try {
-          const canvas = document.createElement('canvas');
-          let w = img.width, h = img.height;
-          if (w > h) { h = Math.round((h / w) * maxSize); w = maxSize; }
-          else { w = Math.round((w / h) * maxSize); h = maxSize; }
-          canvas.width = w;
-          canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          const result = canvas.toDataURL('image/jpeg', 0.7);
-          console.log('[Thumbnail] Generated:', result.length, 'chars');
-          resolve(result);
-        } catch (canvasErr) {
-          console.error('[Thumbnail] Canvas error:', canvasErr);
-          resolve(base64);
-        }
-      };
-      img.onerror = (err) => {
-        clearTimeout(timeout);
-        console.error('[Thumbnail] Image load error:', err);
-        // Fallback: use the original base64 so we at least save something
-        resolve(base64);
-      };
-      img.src = base64;
-    } catch (err) {
-      clearTimeout(timeout);
-      console.error('[Thumbnail] Unexpected error:', err);
-      resolve(base64);
-    }
-  });
-}
-
 export default function App() {
   const { isDark, toggle: toggleTheme } = useTheme();
   // If a token exists, start in 'restoring' state instead of 'login' to avoid flash
@@ -84,14 +31,13 @@ export default function App() {
     try {
       const saved = localStorage.getItem('nutriscan_profile');
       return saved && saved !== "undefined" ? JSON.parse(saved) : null;
-    } catch (e) {
+    } catch {
       return null;
     }
   });
   const [analysisResult, setAnalysisResult] = useState(null);
   const [error, setError] = useState(null);
-
-
+  const [pendingSignUp, setPendingSignUp] = useState(null);
   useEffect(() => {
     if (authToken && !userAuth) {
       fetchUserData();
@@ -120,25 +66,35 @@ export default function App() {
     }
   };
 
-  const handleLogin = (user, token) => {
+  const handleLogin = (user, token, deletionCancelled = false) => {
     setUserAuth(user);
     setToken(token);
     setUserProfile(user.profile);
     localStorage.setItem('nutriscan_token', token);
     localStorage.setItem('nutriscan_profile', JSON.stringify(user.profile));
     setCurrentView(user.profile ? 'dashboard' : 'onboarding');
+
+    if (deletionCancelled) {
+      setTimeout(() => {
+        alert("Welcome back! Your account deletion request has been cancelled, and your data is safe.");
+      }, 500);
+    }
   };
 
   const handleLogout = () => {
     setToken(null);
     setUserAuth(null);
     setUserProfile(null);
+    setPendingSignUp(null);
     localStorage.removeItem('nutriscan_token');
     localStorage.removeItem('nutriscan_profile');
     setCurrentView('login');
   };
 
-
+  const handleSignUpPending = (data) => {
+    setPendingSignUp(data);
+    setCurrentView('onboarding');
+  };
 
   const handleOnboardingComplete = async (profile) => {
     setUserProfile(profile);
@@ -193,13 +149,13 @@ export default function App() {
     setCurrentView('loading');
     setError(null);
     try {
-      const result = await analyzeFoodImage(imageBase64, userProfile);
+      const result = await analyzeFoodImage(imageBase64, userProfile, authToken);
       setAnalysisResult(result);
       setCurrentView('results');
 
       if (authToken) {
         // Send the full imageBase64 for Cloudinary storage
-        await fetch('http://localhost:5000/scans', {
+        const saveResponse = await fetch('http://localhost:5000/scans', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -225,14 +181,15 @@ export default function App() {
             }
           })
         });
+        if (saveResponse.ok) {
+          const savedScan = await saveResponse.json();
+          setAnalysisResult(prev => prev ? { ...prev, scanId: savedScan.id, servings: savedScan.servings || 1 } : prev);
+        }
         refreshStreak();
       }
     } catch (err) {
       console.error(err);
-      const msg = err.message?.includes('Rate limited') || err.message?.includes('wait')
-        ? err.message
-        : "Analysis failed. Gemini might be busy. Try again!";
-      setError(msg);
+      setError(err.message || "Analysis failed. Gemini might be busy. Try again!");
       setCurrentView('home');
     }
   };
@@ -262,7 +219,7 @@ export default function App() {
         setCurrentView('results');
 
         if (authToken) {
-          await fetch('http://localhost:5000/scans', {
+          const saveResponse = await fetch('http://localhost:5000/scans', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -281,6 +238,10 @@ export default function App() {
               productData: data.product
             })
           });
+          if (saveResponse.ok) {
+            const savedScan = await saveResponse.json();
+            setAnalysisResult(prev => prev ? { ...prev, scanId: savedScan.id, servings: savedScan.servings || 1 } : prev);
+          }
           refreshStreak();
         }
       } else {
@@ -318,7 +279,7 @@ export default function App() {
       setCurrentView('results');
 
       if (authToken) {
-        await fetch('http://localhost:5000/scans', {
+        const saveResponse = await fetch('http://localhost:5000/scans', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -337,6 +298,10 @@ export default function App() {
             productData
           })
         });
+        if (saveResponse.ok) {
+          const savedScan = await saveResponse.json();
+          setAnalysisResult(prev => prev ? { ...prev, scanId: savedScan.id, servings: savedScan.servings || 1 } : prev);
+        }
         refreshStreak();
       }
     } catch (err) {
@@ -382,15 +347,25 @@ export default function App() {
       )}
 
       {currentView === 'login' && <Login onLogin={handleLogin} onNavigateSignup={() => setCurrentView('signup')} />}
-      {currentView === 'signup' && <SignUp onLogin={handleLogin} onNavigateLogin={() => setCurrentView('login')} />}
+      {currentView === 'signup' && <SignUp onLogin={handleLogin} onNavigateLogin={() => setCurrentView('login')} onSignUpPending={handleSignUpPending} />}
 
       {currentView === 'onboarding' && (
         <Onboarding
           onComplete={handleOnboardingComplete}
           initialProfile={userProfile}
-          userAuth={userAuth}
           authToken={authToken}
-          onBack={() => userProfile ? setCurrentView('profile') : handleLogout()}
+          pendingSignUp={pendingSignUp}
+          onLogin={handleLogin}
+          onBack={() => {
+            if (pendingSignUp) {
+              setPendingSignUp(null);
+              setCurrentView('signup');
+            } else if (userProfile) {
+              setCurrentView('profile');
+            } else {
+              handleLogout();
+            }
+          }}
         />
       )}
 
@@ -431,7 +406,7 @@ export default function App() {
           userAuth={userAuth}
           authToken={authToken}
           onBack={() => setCurrentView('dashboard')}
-          onDelete={() => handleResetProfile()}
+          onDelete={handleLogout}
           onLogout={handleLogout}
           onDetailsSaved={handleUserDetailsUpdated}
           onNavigateFeatures={() => setCurrentView('features')}

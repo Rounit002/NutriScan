@@ -125,7 +125,7 @@ export default function Results({ result, onBack, authToken, onServingsChanged }
       // Persist to backend if we have a scan ID
       if (authToken && result.scanId) {
         try {
-          await fetch(`http://localhost:5000/scans/${result.scanId}/servings`, {
+          const response = await fetch(`http://localhost:5000/scans/${result.scanId}/servings`, {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',
@@ -133,10 +133,13 @@ export default function Results({ result, onBack, authToken, onServingsChanged }
             },
             body: JSON.stringify({ servings: newServings }),
           });
+          if (!response.ok) throw new Error('Failed to save servings');
           onServingsChanged?.(result.scanId, newServings);
         } catch (err) {
           console.error('Failed to persist servings:', err);
         }
+      } else {
+        onServingsChanged?.(result.scanId, newServings);
       }
     }
   };

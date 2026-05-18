@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { jwtDecode } from 'jwt-decode';
-import { Field, Label, Input, Description } from '@headlessui/react';
-import { Mail, Lock, ArrowRight, ShieldCheck, Eye, EyeOff, Leaf } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 
 export default function Login({ onLogin, onNavigateSignup }) {
   const [email, setEmail] = useState('');
@@ -10,7 +9,6 @@ export default function Login({ onLogin, onNavigateSignup }) {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [focusedField, setFocusedField] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -24,7 +22,7 @@ export default function Login({ onLogin, onNavigateSignup }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      onLogin(data.user, data.token);
+      onLogin(data.user, data.token, data.deletionCancelled);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -42,181 +40,143 @@ export default function Login({ onLogin, onNavigateSignup }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      onLogin(data.user, data.token);
-    } catch (err) {
+      onLogin(data.user, data.token, data.deletionCancelled);
+    } catch {
       setError('Google login failed');
     }
   };
 
-  const inputStyle = (field) => ({
-    background: focusedField === field ? '#ffffff' : 'var(--ns-surface-low)',
-    borderColor: focusedField === field ? 'var(--ns-primary-con)' : 'var(--ns-outline-var)',
-    boxShadow: focusedField === field ? '0 0 0 4px rgba(75, 111, 68,0.12)' : 'none',
-    color: 'var(--ns-on-surface)',
-    borderWidth: '1.5px',
-    borderStyle: 'solid',
-    borderRadius: '12px',
-    padding: '0.875rem 1rem 0.875rem 2.75rem',
-    fontFamily: 'var(--font-main)',
-    fontSize: '0.9375rem',
-    width: '100%',
-    outline: 'none',
-    transition: 'all 0.2s ease',
-  });
-
   return (
-    <div className="min-h-screen flex items-center justify-center px-5 py-10"
-      style={{ background: 'var(--ns-surface)', fontFamily: 'var(--font-main)' }}>
+    <div className="nf-auth-page">
+      <style>{`
+        .nf-auth-page {
+          min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+          background: #ffffff !important; font-family: var(--font-main, 'Inter', sans-serif);
+          padding: clamp(34px, 8vh, 70px) 28px 34px; box-sizing: border-box;
+        }
+        .nf-auth-page *, .nf-auth-page *::before, .nf-auth-page *::after { box-sizing: border-box; }
+        .nf-auth-page input, .nf-auth-page select, .nf-auth-page textarea {
+          background-color: #ffffff !important;
+        }
+        .nf-auth-inner { width: 100%; max-width: 340px; display: flex; flex-direction: column; align-items: center; }
+        .nf-brand { align-self: flex-start; margin: 0 0 clamp(34px, 9vh, 62px); font-family: Georgia, serif; font-size: 1.55rem; line-height: 1; letter-spacing: -0.055em; color: #5C6B3C; }
+        .nf-brand-flow { color: #8A8275; font-weight: 700; }
+        .nf-auth-title { font-size: 1.72rem; font-weight: 850; color: #080808; text-align: center; margin: 0 0 36px; letter-spacing: -0.04em; }
+        .nf-input-group { width: 100%; margin-bottom: 18px; }
+        .nf-input {
+          width: 100%; height: 32px; border: 1.4px solid #d9e1da; border-radius: 6px !important; padding: 0 10px;
+          font-size: 0.86rem; color: #1a1a1a; outline: none;
+          transition: border-color 0.2s, box-shadow 0.2s; font-family: inherit; box-sizing: border-box;
+        }
+        .nf-input::placeholder { color: #aeb5af; font-weight: 500; }
+        .nf-input:focus { border-color: #5C6B3C; box-shadow: 0 0 0 3px rgba(92, 107, 60, 0.1); }
+        .nf-input-wrapper { position: relative; }
+        .nf-eye-btn {
+          position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+          background: none; border: none; color: #bbb; cursor: pointer; padding: 4px;
+        }
+        .nf-forgot { text-align: right; width: 100%; margin-top: -4px; margin-bottom: clamp(34px, 8vh, 52px); }
+        .nf-forgot button { background: none; border: none; color: #111; font-size: 0.82rem; font-weight: 800; cursor: pointer; padding: 0; }
+        .nf-submit-btn {
+          width: 100%; height: 45px; border-radius: 999px; border: none;
+          background: #5C6B3C; color: #fff; font-size: 0.9rem; font-weight: 800;
+          cursor: pointer; transition: all 0.2s; margin-top: 0; letter-spacing: 0;
+          box-shadow: 0 8px 18px rgba(92, 107, 60, 0.22);
+        }
+        .nf-submit-btn:hover { background: #4A5731; transform: translateY(-1px); box-shadow: 0 10px 22px rgba(92, 107, 60, 0.28); }
+        .nf-submit-btn:active { transform: translateY(0); }
+        .nf-submit-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+        .nf-divider { display: flex; align-items: center; gap: 12px; width: 100%; margin: clamp(48px, 10vh, 64px) 0 22px; }
+        .nf-divider-line { flex: 1; height: 1px; background: #dfe3df; }
+        .nf-divider-text { color: #777; font-size: 0.72rem; font-weight: 700; }
+        .nf-social-row { display: flex; gap: 10px; justify-content: center; margin-bottom: clamp(42px, 10vh, 58px); }
+        .nf-social-btn {
+          width: 48px; height: 34px; border-radius: 8px; border: none; cursor: pointer;
+          display: flex; align-items: center; justify-content: center; font-size: 1.15rem;
+          font-weight: 800; color: #fff; transition: transform 0.15s; background: #5C6B3C;
+        }
+        .nf-social-btn:hover { transform: scale(1.05); }
+        .nf-google-wrap {
+          border-radius: 8px; overflow: hidden; width: 48px; height: 34px; background: #5C6B3C;
+          display: grid; place-items: center; position: relative; transition: transform 0.15s;
+        }
+        .nf-google-wrap:hover { transform: scale(1.05); }
+        .nf-google-face {
+          position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+          color: #fff; font-size: 1.12rem; font-weight: 900; line-height: 1; pointer-events: none;
+        }
+        .nf-google-control { position: absolute; inset: 0; opacity: 0.01; }
+        .nf-google-control > div { width: 100% !important; height: 100% !important; }
+        .nf-switch-text { color: #161616; font-size: 0.78rem; text-align: center; font-weight: 650; margin: 0; }
+        .nf-switch-link { display: block; margin: 12px auto 0; background: none; border: none; color: #5C6B3C; font-weight: 800; cursor: pointer; font-size: 0.88rem; }
+        .nf-error { width: 100%; background: #FFF0F0; color: #D32F2F; padding: 10px 12px; border-radius: 10px; font-size: 0.78rem; font-weight: 700; margin-bottom: 14px; text-align: center; }
+        .nf-spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
 
-      {/* Background decoration */}
-      <div className="fixed top-0 right-0 w-80 h-80 rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(circle, rgba(75, 111, 68,0.08) 0%, transparent 70%)' }} />
-      <div className="fixed bottom-0 left-0 w-64 h-64 rounded-full pointer-events-none"
-        style={{ background: 'radial-gradient(circle, rgba(35,172,241,0.07) 0%, transparent 70%)' }} />
+      <main className="nf-auth-inner">
+        <div className="nf-brand">Fit<span className="nf-brand-flow">Scan</span></div>
 
-      <div className="w-full max-w-sm animate-fade-in-up">
+        <h1 className="nf-auth-title">Log In</h1>
 
-        {/* Logo + Brand */}
-        <div className="flex flex-col items-center mb-10">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
-            style={{ background: 'linear-gradient(135deg, #4B6F44, #4B6F44)', boxShadow: '0 8px 24px rgba(75, 111, 68,0.3)' }}>
-            <Leaf size={30} color="white" />
+        {error && <div className="nf-error">{error}</div>}
+
+        <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }} id="login-form">
+          <div className="nf-input-group">
+            <input className="nf-input" type="email" placeholder="Email" value={email}
+              onChange={(e) => setEmail(e.target.value)} required id="login-email" autoComplete="email" />
           </div>
-          <h1 className="text-3xl font-bold text-center" style={{ fontFamily: 'var(--font-headline)', color: 'var(--ns-on-surface)', letterSpacing: '-0.02em' }}>
-            NutriScan AI
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--ns-outline)' }}>
-            Welcome back. Enter your details to continue.
-          </p>
-        </div>
 
-        {/* Error */}
-        {error && (
-          <div className="mb-5 px-4 py-3 rounded-xl text-sm font-semibold animate-streak-pop"
-            style={{ background: 'var(--ns-error-con)', color: 'var(--ns-error)', borderRadius: '12px' }}>
-            {error}
-          </div>
-        )}
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5" id="login-form">
-
-          {/* Email */}
-          <Field>
-            <Label className="block text-xs font-semibold mb-2 uppercase tracking-wider"
-              style={{ color: focusedField === 'email' ? 'var(--ns-primary)' : 'var(--ns-on-surface-var)', fontFamily: 'var(--font-main)' }}>
-              Email Address
-            </Label>
-            <Description className="sr-only">Enter your email</Description>
-            <div className="relative">
-              <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                style={{ color: focusedField === 'email' ? 'var(--ns-primary)' : 'var(--ns-outline)' }} />
-              <Input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onFocus={() => setFocusedField('email')}
-                onBlur={() => setFocusedField(null)}
-                required
-                id="login-email"
-                autoComplete="email"
-                style={inputStyle('email')}
-              />
-            </div>
-          </Field>
-
-          {/* Password */}
-          <Field>
-            <div className="flex justify-between items-center mb-2">
-              <Label className="block text-xs font-semibold uppercase tracking-wider"
-                style={{ color: focusedField === 'password' ? 'var(--ns-primary)' : 'var(--ns-on-surface-var)', fontFamily: 'var(--font-main)' }}>
-                Password
-              </Label>
-              <button type="button" className="text-xs font-semibold"
-                style={{ color: 'var(--ns-primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
-                Forgot Password?
+          <div className="nf-input-group">
+            <div className="nf-input-wrapper">
+              <input className="nf-input" type={showPassword ? 'text' : 'password'} placeholder="Password"
+                value={password} onChange={(e) => setPassword(e.target.value)} required
+                id="login-password" autoComplete="current-password" style={{ paddingRight: '34px' }} />
+              <button type="button" className="nf-eye-btn" onClick={() => setShowPassword(!showPassword)} tabIndex={-1}>
+                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
               </button>
             </div>
-            <Description className="sr-only">Enter your password</Description>
-            <div className="relative">
-              <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
-                style={{ color: focusedField === 'password' ? 'var(--ns-primary)' : 'var(--ns-outline)' }} />
-              <Input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onFocus={() => setFocusedField('password')}
-                onBlur={() => setFocusedField(null)}
-                required
-                id="login-password"
-                autoComplete="current-password"
-                style={{ ...inputStyle('password'), paddingRight: '2.75rem' }}
-              />
-              <button type="button" onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2"
-                style={{ color: 'var(--ns-outline)', background: 'none', border: 'none', cursor: 'pointer' }}
-                tabIndex={-1} aria-label={showPassword ? 'Hide password' : 'Show password'}>
-                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </Field>
+          </div>
 
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            id="login-submit"
-            className="btn-primary w-full mt-1"
-            style={{ fontSize: '1rem', borderRadius: '12px', minHeight: '52px' }}
-            onMouseEnter={(e) => { if (!isSubmitting) e.currentTarget.style.transform = 'translateY(-2px)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}>
-            {isSubmitting ? (
-              <span className="flex items-center gap-2">
-                <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                Signing in...
-              </span>
-            ) : (
-              <>Log In <ArrowRight size={18} /></>
-            )}
+          <div className="nf-forgot">
+            <button type="button">Forgot your password?</button>
+          </div>
+
+          <button type="submit" className="nf-submit-btn" disabled={isSubmitting} id="login-submit">
+            {isSubmitting ? <><span className="nf-spinner" /> Signing in...</> : 'Log In'}
           </button>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px" style={{ background: 'var(--ns-outline-var)' }} />
-            <span className="text-xs font-medium" style={{ color: 'var(--ns-outline)' }}>or continue with</span>
-            <div className="flex-1 h-px" style={{ background: 'var(--ns-outline-var)' }} />
-          </div>
-
-          {/* Google */}
-          <div className="flex justify-center">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => setError('Google Login Failed')}
-              theme="outline"
-              shape="rectangular"
-              size="large"
-              width="100%"
-            />
-          </div>
         </form>
 
-        {/* Sign Up link */}
-        <p className="text-center text-sm mt-8" style={{ color: 'var(--ns-outline)' }}>
-          Don't have an account?{' '}
-          <button onClick={onNavigateSignup} id="navigate-signup"
-            className="font-semibold" style={{ color: 'var(--ns-primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
-            Sign Up
-          </button>
-        </p>
-
-        {/* Footer */}
-        <div className="flex items-center justify-center gap-1.5 mt-6">
-          <ShieldCheck size={13} style={{ color: 'var(--ns-outline)' }} />
-          <span className="text-xs" style={{ color: 'var(--ns-outline)' }}>End-to-end encrypted</span>
+        <div className="nf-divider">
+          <div className="nf-divider-line" />
+          <span className="nf-divider-text">or</span>
+          <div className="nf-divider-line" />
         </div>
-      </div>
+
+        <div className="nf-social-row">
+          <div className="nf-google-wrap">
+            <span className="nf-google-face" aria-hidden="true">G</span>
+            <div className="nf-google-control">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError('Google Login Failed')}
+                type="icon"
+                shape="rectangular"
+                size="large"
+              />
+            </div>
+          </div>
+          <button className="nf-social-btn" title="Facebook">f</button>
+          <button className="nf-social-btn" title="Apple">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" /></svg>
+          </button>
+        </div>
+
+        <p className="nf-switch-text">
+          Don't have account yet?
+          <button className="nf-switch-link" onClick={onNavigateSignup} id="navigate-signup">Sign up</button>
+        </p>
+      </main>
     </div>
   );
 }

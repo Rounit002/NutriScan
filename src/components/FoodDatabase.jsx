@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Database, Search, Sparkles, Utensils } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -8,6 +8,12 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const { t } = useTranslation();
+
+
+
+
+
+
 
   useEffect(() => {
     let isMounted = true;
@@ -33,8 +39,12 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
         });
 
         if (!response.ok) throw new Error('Failed to load products');
-        const data = await response.json();
-        if (isMounted) setProducts(Array.isArray(data) ? data : []);
+        const localData = await response.json();
+        let nextProducts = Array.isArray(localData) ? localData : [];
+
+
+
+        if (isMounted) setProducts(nextProducts);
       } catch (loadError) {
         if (loadError.name !== 'AbortError') {
           console.error(loadError);
@@ -45,20 +55,20 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
       }
     };
 
-    const timeoutId = setTimeout(loadProducts, searchTerm ? 250 : 0);
+    const timeoutId = setTimeout(loadProducts, searchTerm ? 650 : 0);
 
     return () => {
       isMounted = false;
       controller.abort();
       clearTimeout(timeoutId);
     };
-  }, [authToken, searchTerm]);
+  }, [authToken, searchTerm, t]);
 
   const productCountLabel = useMemo(() => {
     if (isLoading) return t('loading_products');
-    if (products.length === 1) return t('shared_product_one');
-    return t('shared_product', { count: products.length });
-  }, [isLoading, products.length]);
+    if (products.length === 1) return '1 packaged product';
+    return `${products.length} packaged products`;
+  }, [isLoading, products.length, t]);
 
   const getProductImage = (product) => {
     const rawProductData = product.rawProductData || product.raw_product_data || {};
@@ -87,7 +97,7 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
         <section className="food-db-hero">
           <div>
             <strong>{productCountLabel}</strong>
-            <p>{t('food_db_desc')}</p>
+            <p>Search packaged foods from the web and products scanned by FitScan users, then analyze one for your own health profile.</p>
           </div>
           <Sparkles size={24} />
         </section>
@@ -132,7 +142,9 @@ export default function FoodDatabase({ authToken, onBack, onSelectProduct }) {
                     <strong>{product.product_name || t('unknown_product')}</strong>
                     <small>{product.brands || t('unknown_brand')}</small>
                   </span>
-                  <span className="food-db-score">{product.latest_score || '--'}</span>
+                  <span className={`food-db-score ${product.latest_score ? '' : 'is-online'}`}>
+                    {product.latest_score || 'WEB'}
+                  </span>
                 </button>
               );
             })

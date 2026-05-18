@@ -173,12 +173,12 @@ router.post('/register', async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
     const insertRes = await req.pool.query(
-      'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, profile',
+      'INSERT INTO users (email, password_hash, name) VALUES ($1, $2, $3) RETURNING id, email, name, profile, is_premium, subscription_expires_at, image_scans_used, subscription_plan',
       [email, passwordHash, name]
     );
     const user = insertRes.rows[0];
     const { points, streak } = await updateStreak(req.pool, user.id);
-    const hydratedUser = await hydrateUserMedicalProfile(req.pool, { ...user, points, streak });
+    const hydratedUser = await hydrateUserMedicalProfile(req.pool, { ...user, isPremium: user.is_premium, subscriptionExpiresAt: user.subscription_expires_at, imageScansUsed: user.image_scans_used, subscriptionPlan: user.subscription_plan, points, streak });
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ token, user: hydratedUser });
@@ -201,14 +201,24 @@ router.post('/login', async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) return res.status(400).json({ error: 'Invalid credentials' });
 
+    // Cancel any scheduled deletion — logging in means the user wants to keep the account
+    let deletionCancelled = false;
+    if (user.scheduled_deletion_at) {
+      await req.pool.query('UPDATE users SET scheduled_deletion_at = NULL WHERE id = $1', [user.id]);
+      console.log(`[Deletion Cancelled] User ${user.id} logged in, scheduled deletion cancelled`);
+      deletionCancelled = true;
+    }
+
     const { points, streak } = await updateStreak(req.pool, user.id);
     const hydratedUser = await hydrateUserMedicalProfile(req.pool, {
       id: user.id, email: user.email, name: user.name, points, streak,
-      profile: user.profile
+      profile: user.profile, isPremium: user.is_premium,
+      subscriptionExpiresAt: user.subscription_expires_at, imageScansUsed: user.image_scans_used,
+      subscriptionPlan: user.subscription_plan
     });
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: hydratedUser });
+    res.json({ token, user: hydratedUser, deletionCancelled });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
@@ -223,22 +233,31 @@ router.post('/google', async (req, res) => {
     let user;
     if (userRes.rows.length === 0) {
       const insertRes = await req.pool.query(
-        'INSERT INTO users (email, name, google_id) VALUES ($1, $2, $3) RETURNING id, email, name, profile',
+        'INSERT INTO users (email, name, google_id) VALUES ($1, $2, $3) RETURNING id, email, name, profile, is_premium, subscription_expires_at, image_scans_used, subscription_plan',
         [email, name, googleId]
       );
       user = insertRes.rows[0];
     } else {
       user = userRes.rows[0];
+      // Cancel any scheduled deletion — logging in means the user wants to keep the account
+      var deletionCancelled = false;
+      if (user.scheduled_deletion_at) {
+        await req.pool.query('UPDATE users SET scheduled_deletion_at = NULL WHERE id = $1', [user.id]);
+        console.log(`[Deletion Cancelled] User ${user.id} (Google) logged in, scheduled deletion cancelled`);
+        deletionCancelled = true;
+      }
     }
 
     const { points, streak } = await updateStreak(req.pool, user.id);
     const hydratedUser = await hydrateUserMedicalProfile(req.pool, {
       id: user.id, email: user.email, name: user.name, points, streak,
-      profile: user.profile
+      profile: user.profile, isPremium: user.is_premium,
+      subscriptionExpiresAt: user.subscription_expires_at, imageScansUsed: user.image_scans_used,
+      subscriptionPlan: user.subscription_plan
     });
 
     const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: hydratedUser });
+    res.json({ token, user: hydratedUser, deletionCancelled: typeof deletionCancelled !== 'undefined' ? deletionCancelled : false });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Google login failed' });
@@ -249,13 +268,22 @@ router.post('/google', async (req, res) => {
 router.get('/me', authenticate, async (req, res) => {
   try {
     const userRes = await req.pool.query(
-      'SELECT id, email, name, points, streak, profile FROM users WHERE id = $1',
+      'SELECT id, email, name, points, streak, profile, scheduled_deletion_at, is_premium, subscription_expires_at, image_scans_used, subscription_plan FROM users WHERE id = $1',
       [req.userId]
     );
     if (userRes.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
-    const user = await hydrateUserMedicalProfile(req.pool, userRes.rows[0]);
+    const row = userRes.rows[0];
+    const user = await hydrateUserMedicalProfile(req.pool, row);
+    // Include scheduled_deletion_at so frontend can show the countdown banner
+    if (row.scheduled_deletion_at) {
+      user.scheduledDeletionAt = row.scheduled_deletion_at;
+    }
+    user.isPremium = row.is_premium;
+    user.subscriptionExpiresAt = row.subscription_expires_at;
+    user.imageScansUsed = row.image_scans_used;
+    user.subscriptionPlan = row.subscription_plan;
     res.json({ user });
   } catch (error) {
     console.error(error);
@@ -431,6 +459,61 @@ router.get('/leaderboard', authenticate, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch leaderboard' });
+  }
+});
+
+// Schedule Account Deletion — marks account for permanent removal after 7 days
+router.delete('/account', authenticate, async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    const userRes = await req.pool.query('SELECT id, scheduled_deletion_at FROM users WHERE id = $1', [userId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Schedule deletion 7 days from now
+    const deletionDate = new Date();
+    deletionDate.setDate(deletionDate.getDate() + 7);
+
+    await req.pool.query(
+      'UPDATE users SET scheduled_deletion_at = $1 WHERE id = $2',
+      [deletionDate, userId]
+    );
+
+    console.log(`[Account Scheduled] User ${userId} scheduled for deletion on ${deletionDate.toISOString()}`);
+    res.json({
+      success: true,
+      message: 'Account scheduled for deletion',
+      scheduledDeletionAt: deletionDate.toISOString(),
+    });
+  } catch (error) {
+    console.error('[Account Deletion Scheduling Error]', error);
+    res.status(500).json({ error: 'Failed to schedule account deletion. Please try again.' });
+  }
+});
+
+// Cancel Scheduled Deletion
+router.post('/cancel-deletion', authenticate, async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    const userRes = await req.pool.query('SELECT scheduled_deletion_at FROM users WHERE id = $1', [userId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!userRes.rows[0].scheduled_deletion_at) {
+      return res.json({ success: true, message: 'No deletion was scheduled' });
+    }
+
+    await req.pool.query('UPDATE users SET scheduled_deletion_at = NULL WHERE id = $1', [userId]);
+
+    console.log(`[Deletion Cancelled] User ${userId} cancelled scheduled deletion`);
+    res.json({ success: true, message: 'Account deletion cancelled' });
+  } catch (error) {
+    console.error('[Cancel Deletion Error]', error);
+    res.status(500).json({ error: 'Failed to cancel deletion. Please try again.' });
   }
 });
 

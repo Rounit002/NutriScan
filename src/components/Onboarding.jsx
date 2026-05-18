@@ -1,264 +1,480 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Activity,
-  User,
-  ChevronRight,
-  ChevronLeft,
-  Check,
-  Sparkles,
-  ShieldCheck,
-  ArrowLeft,
-  AlertCircle,
-  Calendar,
-  Scale,
-  Ruler
-} from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Leaf, ArrowLeft } from 'lucide-react';
 import { MedicalProfilePage, HealthGoalsPage } from './Profile';
 
-export default function Onboarding({ onComplete, initialProfile, userAuth, authToken, onBack }) {
+/* ─── Stepper ─── */
+function StepIndicator({ current, total }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 32 }}>
+      {Array.from({ length: total }, (_, i) => {
+        const step = i + 1;
+        const done = step <= current;
+        return (
+          <React.Fragment key={step}>
+            <div style={{
+              width: 28, height: 28, borderRadius: '50%',
+              background: done ? '#4CAF50' : '#e8e8e8',
+              color: done ? '#fff' : '#bbb',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.75rem', fontWeight: 700, flexShrink: 0,
+              transition: 'all 0.3s',
+            }}>{step}</div>
+            {step < total && (
+              <div style={{
+                flex: 1, height: 2, minWidth: 20,
+                background: step < current ? '#4CAF50' : '#e0e0e0',
+                borderStyle: step < current ? 'solid' : 'dashed',
+                borderWidth: 0, transition: 'all 0.3s',
+                backgroundImage: step >= current ? 'repeating-linear-gradient(90deg, #ccc 0 5px, transparent 5px 10px)' : 'none',
+              }} />
+            )}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── Age Picker (scroll wheel) ─── */
+function AgePicker({ value, onChange }) {
+  const containerRef = useRef(null);
+  const ITEM_H = 64;
+  const ages = Array.from({ length: 80 }, (_, i) => i + 10); // 10-89
+  const idx = ages.indexOf(value);
+  const [scrolling, setScrolling] = useState(false);
+  const scrollTimer = useRef(null);
+
+  useEffect(() => {
+    if (containerRef.current && !scrolling) {
+      const target = idx * ITEM_H;
+      containerRef.current.scrollTo({ top: target, behavior: 'smooth' });
+    }
+  }, [value]);
+
+  const handleScroll = useCallback(() => {
+    setScrolling(true);
+    clearTimeout(scrollTimer.current);
+    scrollTimer.current = setTimeout(() => {
+      if (!containerRef.current) return;
+      const scrollTop = containerRef.current.scrollTop;
+      const newIdx = Math.round(scrollTop / ITEM_H);
+      const clamped = Math.max(0, Math.min(ages.length - 1, newIdx));
+      containerRef.current.scrollTo({ top: clamped * ITEM_H, behavior: 'smooth' });
+      onChange(ages[clamped]);
+      setScrolling(false);
+    }, 80);
+  }, [ages, onChange]);
+
+  return (
+    <div style={{ position: 'relative', height: ITEM_H * 5, overflow: 'hidden', width: '100%', maxWidth: 220, margin: '0 auto' }}>
+      {/* Selection highlight */}
+      <div style={{
+        position: 'absolute', top: ITEM_H * 2, left: '50%', transform: 'translateX(-50%)',
+        width: 80, height: ITEM_H, borderRadius: 16, background: '#4CAF50',
+        zIndex: 0, transition: 'all 0.2s',
+      }} />
+      {/* Fade gradients */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: ITEM_H * 2, background: 'linear-gradient(to bottom, #fff 20%, transparent)', zIndex: 2, pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: ITEM_H * 2, background: 'linear-gradient(to top, #fff 20%, transparent)', zIndex: 2, pointerEvents: 'none' }} />
+      {/* Scrollable list */}
+      <div ref={containerRef} onScroll={handleScroll}
+        style={{ height: '100%', overflowY: 'auto', scrollSnapType: 'y mandatory', paddingTop: ITEM_H * 2, paddingBottom: ITEM_H * 2, scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch', position: 'relative', zIndex: 1 }}>
+        <style>{`.nf-age-scroll::-webkit-scrollbar { display: none; }`}</style>
+        <div className="nf-age-scroll" style={{ display: 'contents' }}>
+          {ages.map((age, i) => {
+            const isSelected = age === value;
+            const dist = Math.abs(ages.indexOf(value) - i);
+            return (
+              <div key={age} onClick={() => onChange(age)}
+                style={{
+                  height: ITEM_H, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  scrollSnapAlign: 'center', cursor: 'pointer', transition: 'all 0.2s',
+                  fontSize: isSelected ? '2.2rem' : dist === 1 ? '1.5rem' : '1.2rem',
+                  fontWeight: isSelected ? 800 : 500,
+                  color: isSelected ? '#fff' : dist <= 1 ? '#999' : '#ccc',
+                  opacity: isSelected ? 1 : dist <= 1 ? 0.8 : 0.4,
+                }}>
+                {age}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Weight Picker (ruler slider) ─── */
+function WeightPicker({ value, onChange, unit, onUnitChange }) {
+  const rulerRef = useRef(null);
+  const TICK_W = 8;
+  const MIN = 1, MAX = 200;
+  const ticks = MAX - MIN;
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    if (rulerRef.current && !dragging) {
+      const target = (value - MIN) * TICK_W - rulerRef.current.clientWidth / 2;
+      rulerRef.current.scrollTo({ left: target, behavior: 'smooth' });
+    }
+  }, [value, unit]);
+
+  const handleScroll = useCallback(() => {
+    if (!rulerRef.current) return;
+    const scrollLeft = rulerRef.current.scrollLeft;
+    const center = scrollLeft + rulerRef.current.clientWidth / 2;
+    const newVal = Math.round(center / TICK_W) + MIN;
+    const clamped = Math.max(MIN, Math.min(MAX, newVal));
+    onChange(clamped);
+  }, [onChange]);
+
+  const displayValue = unit === 'lbs' ? Math.round(value * 2.205) : value;
+  const displayUnit = unit === 'lbs' ? 'Lbs' : 'Kg';
+
+  return (
+    <div style={{ textAlign: 'center', width: '100%' }}>
+      {/* Unit toggle */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 0, marginBottom: 28, borderRadius: 50, overflow: 'hidden', border: '2px solid #e0e0e0', width: 'fit-content', margin: '0 auto 28px' }}>
+        {['kg', 'lbs'].map(u => (
+          <button key={u} onClick={() => onUnitChange(u)}
+            style={{
+              padding: '10px 32px', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem',
+              background: unit === u ? '#4CAF50' : 'transparent',
+              color: unit === u ? '#fff' : '#4CAF50', transition: 'all 0.2s',
+            }}>
+            {u === 'kg' ? 'Kg' : 'Lbs'}
+          </button>
+        ))}
+      </div>
+      {/* Display */}
+      <div style={{ fontSize: '3rem', fontWeight: 800, color: '#1a1a1a', marginBottom: 24 }}>
+        {displayValue} <span style={{ fontSize: '1.5rem', fontWeight: 600, color: '#888' }}>{displayUnit}</span>
+      </div>
+      {/* Ruler */}
+      <div style={{ position: 'relative', width: '100%', height: 70, overflow: 'hidden' }}>
+        {/* Center indicator */}
+        <div style={{ position: 'absolute', left: '50%', top: 0, transform: 'translateX(-50%)', width: 3, height: 45, background: '#4CAF50', borderRadius: 2, zIndex: 2 }} />
+        <div ref={rulerRef} onScroll={handleScroll}
+          onTouchStart={() => setDragging(true)} onTouchEnd={() => setDragging(false)}
+          onMouseDown={() => setDragging(true)} onMouseUp={() => setDragging(false)}
+          style={{ overflowX: 'auto', height: '100%', scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch', whiteSpace: 'nowrap', paddingTop: 4 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'flex-end', paddingLeft: '50%', paddingRight: '50%', height: 50 }}>
+            {Array.from({ length: ticks + 1 }, (_, i) => {
+              const v = MIN + i;
+              const isMajor = v % 5 === 0;
+              return (
+                <div key={v} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: TICK_W }}>
+                  <div style={{
+                    width: isMajor ? 2 : 1, height: isMajor ? 36 : 20,
+                    background: isMajor ? '#666' : '#ccc', borderRadius: 1,
+                  }} />
+                  {isMajor && <span style={{ fontSize: '0.6rem', color: '#999', marginTop: 3, fontWeight: 600 }}>{v}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Gender Picker ─── */
+function HeightPicker({ value, onChange }) {
+  const heightValue = Number(value) || 170;
+
+  return (
+    <div style={{ width: '100%', maxWidth: 340, textAlign: 'center' }}>
+      <div style={{
+        width: 132,
+        height: 132,
+        margin: '0 auto 26px',
+        borderRadius: '50%',
+        background: 'linear-gradient(135deg, #F0FFF0, #ffffff)',
+        border: '2px solid #4CAF50',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        boxShadow: '0 14px 34px rgba(76, 175, 80, 0.14)',
+      }}>
+        <strong style={{ fontSize: '2.65rem', lineHeight: 1, color: '#1a1a1a', fontWeight: 800 }}>
+          {heightValue}
+        </strong>
+        <span style={{ marginTop: 6, color: '#4CAF50', fontSize: '0.95rem', fontWeight: 700 }}>cm</span>
+      </div>
+
+      <input
+        type="range"
+        min="100"
+        max="230"
+        step="1"
+        value={heightValue}
+        onChange={(event) => onChange(Number(event.target.value))}
+        aria-label="Select height in centimeters"
+        style={{ width: '100%', accentColor: '#4CAF50', cursor: 'pointer' }}
+      />
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, color: '#999', fontSize: '0.78rem', fontWeight: 700 }}>
+        <span>100 cm</span>
+        <span>230 cm</span>
+      </div>
+
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 28, padding: '14px 16px', borderRadius: 16, border: '2px solid #e8e8e8', background: '#fff' }}>
+        <span style={{ color: '#888', fontSize: '0.9rem', fontWeight: 700 }}>Manual</span>
+        <input
+          type="number"
+          min="100"
+          max="230"
+          value={heightValue}
+          onChange={(event) => onChange(Number(event.target.value))}
+          style={{ flex: 1, minWidth: 0, border: 0, outline: 0, textAlign: 'right', fontSize: '1rem', fontWeight: 800, color: '#1a1a1a', background: 'transparent' }}
+        />
+        <span style={{ color: '#4CAF50', fontSize: '0.9rem', fontWeight: 800 }}>cm</span>
+      </label>
+    </div>
+  );
+}
+
+function GenderPicker({ value, onChange }) {
+  const genders = [
+    { key: 'Female', emoji: '👩', label: 'Female' },
+    { key: 'Male', emoji: '👨', label: 'Male' },
+    { key: 'Other', emoji: '🧑', label: 'Other' },
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, width: '100%', maxWidth: 340 }}>
+      {genders.map(g => {
+        const sel = value === g.key;
+        return (
+          <button key={g.key} onClick={() => onChange(g.key)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '16px 20px', borderRadius: 16,
+              border: sel ? '2px solid #4CAF50' : '2px solid #e8e8e8',
+              background: sel ? '#F0FFF0' : '#fff',
+              cursor: 'pointer', transition: 'all 0.2s', width: '100%',
+            }}>
+            <span style={{ fontSize: '1.6rem', width: 44, height: 44, borderRadius: 12, background: '#f5f5f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{g.emoji}</span>
+            <span style={{ flex: 1, fontSize: '1.05rem', fontWeight: 600, color: '#1a1a1a', textAlign: 'left' }}>{g.label}</span>
+            <div style={{
+              width: 24, height: 24, borderRadius: '50%',
+              border: sel ? '7px solid #4CAF50' : '2px solid #ccc',
+              background: '#fff', transition: 'all 0.2s', flexShrink: 0,
+            }} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── Main Onboarding Component ─── */
+function DateOfBirthPicker({ value, onChange }) {
+  return (
+    <div style={{ width: '100%', maxWidth: 340 }}>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '18px', borderRadius: 18, border: '2px solid #e8e8e8', background: '#fff', boxShadow: '0 10px 26px rgba(0,0,0,0.04)' }}>
+        <span style={{ color: '#888', fontSize: '0.85rem', fontWeight: 700 }}>Date of Birth</span>
+        <input
+          type="date"
+          value={value || ''}
+          onChange={(event) => onChange(event.target.value)}
+          max={new Date().toISOString().split('T')[0]}
+          style={{ width: '100%', border: 0, outline: 0, background: 'transparent', color: '#1a1a1a', fontSize: '1.05rem', fontWeight: 800, fontFamily: 'inherit' }}
+        />
+      </label>
+      <p style={{ margin: '14px 6px 0', color: '#999', fontSize: '0.82rem', lineHeight: 1.45, fontWeight: 600, textAlign: 'center' }}>
+        This helps FitScan personalize nutrition feedback more accurately.
+      </p>
+    </div>
+  );
+}
+
+export default function Onboarding({ onComplete, initialProfile, authToken, onBack, pendingSignUp, onLogin }) {
+  const TOTAL_STEPS = 7;
   const [step, setStep] = useState(1);
   const [error, setError] = useState('');
-
-  // Initialize profile state from initialProfile or defaults
   const [profile, setProfile] = useState(() => ({
-    age: initialProfile?.age || '',
-    height: initialProfile?.height || '',
-    weight: initialProfile?.weight || '',
+    age: parseInt(initialProfile?.age) || 25,
+    height: parseInt(initialProfile?.height) || 170,
+    weight: parseInt(initialProfile?.weight) || 62,
+    weightUnit: 'kg',
     dateOfBirth: initialProfile?.dateOfBirth || initialProfile?.dob || '',
-    gender: initialProfile?.gender || 'Male',
+    gender: initialProfile?.gender || 'Female',
     conditions: initialProfile?.conditions || [],
-    goals: initialProfile?.goals || []
+    goals: initialProfile?.goals || [],
   }));
 
-  const updateProfile = (fields) => {
-    setProfile(prev => ({ ...prev, ...fields }));
-  };
+  const updateProfile = (fields) => setProfile(prev => ({ ...prev, ...fields }));
 
-  const handleBasicsSubmit = async (e) => {
-    e.preventDefault();
-    if (!profile.age || !profile.height || !profile.weight || !profile.dateOfBirth) {
-      setError('Please fill in all details to continue');
-      return;
-    }
-
-    // Save basic details before moving to step 2
-    try {
-      if (authToken) {
-        await fetch('http://localhost:5000/auth/details', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: JSON.stringify({
-            profile: {
-              age: profile.age,
-              height: profile.height,
-              weight: profile.weight,
-              dateOfBirth: profile.dateOfBirth,
-              gender: profile.gender
-            }
-          })
-        });
-      }
-      setStep(2);
-    } catch (err) {
-      console.error(err);
-      setError('Failed to save details. Please try again.');
-    }
-  };
-
-  const handleMedicalSaved = (updatedUser) => {
-    // When medical profile is saved, we move to step 3
-    if (updatedUser?.profile) {
-      updateProfile({ conditions: updatedUser.profile.conditions });
-    }
-    setStep(3);
-  };
-
-  const handleGoalsSaved = (updatedUser) => {
-    // When goals are saved, we complete onboarding
-    if (updatedUser?.profile) {
-      onComplete(updatedUser.profile);
-    } else {
-      onComplete(profile);
+  const handleNext = () => {
+    if (step < TOTAL_STEPS) {
+      setStep(step + 1);
     }
   };
 
   const handleStepBack = () => {
-    if (step > 1) {
-      setStep(step - 1);
+    if (step > 1) setStep(step - 1);
+    else onBack();
+  };
+
+  const handleMedicalSaved = (updatedUser) => {
+    if (updatedUser?.profile) {
+      updateProfile({ conditions: updatedUser.profile.conditions });
+    }
+    setStep(7);
+  };
+
+  const handleGoalsSaved = async (updatedUser) => {
+    const finalGoals = updatedUser?.profile?.goals || profile.goals;
+    const finalProfile = { ...profile, goals: finalGoals };
+    updateProfile({ goals: finalGoals });
+
+    if (pendingSignUp) {
+      try {
+        const url = pendingSignUp.type === 'google' ? 'http://localhost:5000/auth/google' : 'http://localhost:5000/auth/register';
+        const body = pendingSignUp.type === 'google' 
+          ? { email: pendingSignUp.email, name: pendingSignUp.name, googleId: pendingSignUp.googleId }
+          : { name: pendingSignUp.name, email: pendingSignUp.email, password: pendingSignUp.password };
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+
+        const detailsRes = await fetch('http://localhost:5000/auth/details', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.token}` },
+          body: JSON.stringify({ profile: finalProfile })
+        });
+        const detailsData = await detailsRes.json();
+        onLogin(detailsData.user, data.token);
+      } catch (err) {
+        console.error('Registration failed:', err);
+        setError(err.message || 'Registration failed');
+      }
     } else {
-      onBack();
+      onComplete(finalProfile);
     }
   };
 
-  const inputStyle = {
-    background: 'var(--ns-surface-low)',
-    border: '1.5px solid var(--ns-outline-var)',
-    borderRadius: '16px',
-    padding: '0.875rem 1rem 0.875rem 3.5rem',
-    color: 'var(--ns-on-surface)',
-    width: '100%',
-    fontSize: '1rem',
-    fontWeight: '700',
-    outline: 'none',
-    transition: 'all 0.3s ease',
-  };
-
-  const labelStyle = {
-    fontSize: '0.75rem',
-    fontWeight: '900',
-    color: 'var(--ns-on-surface)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.12em',
-    marginBottom: '0.6rem',
-    display: 'block',
-    paddingLeft: '0.25rem',
-    opacity: 0.8
-  };
-
   return (
-    <div className="onboarding-flow min-h-screen" style={{ background: 'var(--ns-surface)', color: 'var(--ns-on-surface)', fontFamily: 'var(--font-main)' }}>
-      {/* Background Decor */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] right-[-20%] w-[500px] h-[500px] rounded-full blur-[120px]"
-          style={{ background: 'radial-gradient(circle, rgba(75, 111, 68, 0.1) 0%, transparent 70%)' }} />
-        <div className="absolute bottom-[-10%] left-[-20%] w-[500px] h-[500px] rounded-full blur-[120px]"
-          style={{ background: 'radial-gradient(circle, rgba(253, 118, 26, 0.08) 0%, transparent 70%)' }} />
-      </div>
+    <div className="nf-onboarding">
+      <style>{`
+        .nf-onboarding {
+          min-height: 100vh; background: #ffffff !important; font-family: var(--font-main, 'Inter', sans-serif);
+          display: flex; flex-direction: column;
+        }
+        .nf-ob-content {
+          flex: 1; display: flex; flex-direction: column; align-items: center;
+          padding: 50px 28px 24px; box-sizing: border-box;
+        }
+        .nf-ob-brand { display: flex; align-items: center; gap: 4px; align-self: flex-start; margin-bottom: 16px; }
+        .nf-ob-brand-nutri { font-family: 'Georgia', serif; font-style: italic; color: #bbb; font-size: 1.25rem; }
+        .nf-ob-brand-scan { font-family: 'Georgia', serif; font-weight: 700; color: #4B6F44; font-size: 1.25rem; }
+        .nf-ob-brand-leaf { color: #4B6F44; margin-left: -2px; }
+        .nf-ob-question { font-size: 1.6rem; font-weight: 700; color: #1a1a1a; text-align: center; margin: 24px 0 32px; letter-spacing: -0.01em; }
+        .nf-ob-footer { padding: 20px 28px 36px; }
+        .nf-ob-next-btn {
+          width: 100%; padding: 16px; border-radius: 50px; border: none;
+          background: #4CAF50; color: #fff; font-size: 1.05rem; font-weight: 600;
+          cursor: pointer; transition: all 0.2s; letter-spacing: 0.01em;
+          box-shadow: 0 4px 16px rgba(76, 175, 80, 0.25);
+        }
+        .nf-ob-next-btn:hover { background: #43A047; transform: translateY(-1px); }
+        .nf-ob-next-btn:active { transform: translateY(0); }
+        .nf-ob-skip-btn {
+          display: block; margin: 16px auto 0; background: none; border: none;
+          color: #888; font-size: 0.95rem; font-weight: 600; cursor: pointer;
+        }
+        .nf-ob-skip-btn:hover { color: #555; }
+        /* Override styles for medical/goals pages embedded in onboarding */
+        .medical-profile-page, .health-goals-page { background: #fff !important; color: #1a1a1a !important; }
+        .medical-profile-shell, .health-goals-shell { border: none !important; background: transparent !important; box-shadow: none !important; padding-top: 20px !important; }
+        .medical-profile-header h1, .health-goals-header h1 { color: #1a1a1a !important; font-weight: 700 !important; }
+        .medical-save-button, .health-goals-save-button {
+          height: 56px !important; border-radius: 50px !important;
+          background: #4CAF50 !important; box-shadow: 0 4px 16px rgba(76,175,80,0.25) !important;
+          font-size: 1rem !important; font-weight: 600 !important; color: white !important;
+        }
+        .medical-issue-item.is-selected, .health-goals-list button.is-selected {
+          border-color: #4CAF50 !important; background: #F0FFF0 !important; color: #4CAF50 !important;
+        }
+        .medical-selected-strip button, .health-goals-selected-strip button {
+          background: #F0FFF0 !important; color: #4CAF50 !important; border: 1px solid #4CAF50 !important;
+        }
+      `}</style>
 
-      {step === 1 && (
-        <div className="relative z-10 px-6 py-10 flex flex-col min-h-screen animate-fade-in-up">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8">
-            <button onClick={handleStepBack} className="w-10 h-10 rounded-xl bg-white flex items-center justify-center border border-var(--ns-outline-var) shadow-sm">
-              <ArrowLeft size={20} color="var(--ns-on-surface)" />
-            </button>
-            <div className="flex items-center gap-2">
-              {[1, 2, 3].map(i => (
-                <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${step === i ? 'w-8 bg-[#4B6F44]' : 'w-2 bg-[#DDD9CF]'}`} />
-              ))}
-            </div>
-            <div className="w-10" />
-          </div>
-
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-14 h-14 bg-[#4B6F44]/10 rounded-2xl border border-[#4B6F44]/20 mb-4">
-              <Sparkles size={28} className="text-[#4B6F44]" />
-            </div>
-            <h1 className="text-3xl font-black tracking-tight mb-2" style={{ color: 'var(--ns-on-surface)' }}>Personalize Your Journey</h1>
-            <p className="text-var(--ns-on-surface-var) text-sm font-bold opacity-80">We'll use these to tailor your nutritional analysis.</p>
-          </div>
-
-          <form onSubmit={handleBasicsSubmit} className="flex-1 flex flex-col gap-6">
-            <div className="ns-card !p-6 border-var(--ns-outline-var) bg-white space-y-5 shadow-lg">
-
-              {/* Age & Gender Row */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label style={labelStyle}>Age</label>
-                  <div className="relative">
-                    <Activity size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#4B6F44] opacity-70" />
-                    <input
-                      type="number"
-                      placeholder="24"
-                      value={profile.age}
-                      onChange={e => updateProfile({ age: e.target.value })}
-                      style={inputStyle}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label style={labelStyle}>Gender</label>
-                  <div className="relative">
-                    <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#4B6F44] opacity-70" />
-                    <select
-                      value={profile.gender}
-                      onChange={e => updateProfile({ gender: e.target.value })}
-                      style={{ ...inputStyle, appearance: 'none' }}
-                    >
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                      <option value="Prefer not to say">Prefer not to say</option>
-                    </select>
-                    <ChevronRight size={16} className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-var(--ns-outline) pointer-events-none" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Height & Weight Row */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label style={labelStyle}>Height (cm)</label>
-                  <div className="relative">
-                    <Ruler size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#4B6F44] opacity-70" />
-                    <input
-                      type="number"
-                      placeholder="175"
-                      value={profile.height}
-                      onChange={e => updateProfile({ height: e.target.value })}
-                      style={inputStyle}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label style={labelStyle}>Weight (kg)</label>
-                  <div className="relative">
-                    <Scale size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#C9A84C] opacity-70" />
-                    <input
-                      type="number"
-                      placeholder="70"
-                      value={profile.weight}
-                      onChange={e => updateProfile({ weight: e.target.value })}
-                      style={inputStyle}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* DOB */}
-              <div>
-                <label style={labelStyle}>Date of Birth</label>
-                <div className="relative">
-                  <Calendar size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#4A7B8A] opacity-70" />
-                  <input
-                    type="date"
-                    value={profile.dateOfBirth}
-                    onChange={e => updateProfile({ dateOfBirth: e.target.value })}
-                    style={inputStyle}
-                  />
-                </div>
-              </div>
-
-              {error && (
-                <div className="flex items-center gap-2 text-red-600 text-xs font-black uppercase tracking-wider animate-shake px-1">
-                  <AlertCircle size={14} />
-                  {error}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-auto pt-6">
-              <button
-                type="submit"
-                className="w-full btn-primary !h-16 text-lg rounded-2xl shadow-xl hover:scale-[1.01] active:scale-[0.98]"
-                style={{ background: 'linear-gradient(135deg, #4B6F44 0%, #4B6F44 100%)', border: 'none', color: 'white' }}
-              >
-                Continue <ChevronRight size={20} />
+      {step <= 5 && (
+        <>
+          <div className="nf-ob-content">
+            <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <button type="button" onClick={handleStepBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a1a1a', display: 'flex', alignItems: 'center', padding: 0 }} aria-label="Back">
+                <ArrowLeft size={24} />
               </button>
-
-              <div className="flex items-center justify-center gap-3 mt-6 opacity-70">
-                <ShieldCheck size={16} className="text-[#4B6F44]" />
-                <p className="text-[10px] font-black uppercase tracking-widest text-var(--ns-on-surface)">Secure & Confidential</p>
+              {/* Brand */}
+              <div className="nf-ob-brand" style={{ marginBottom: 0 }}>
+                <span className="nf-ob-brand-nutri">Nutri</span>
+                <span className="nf-ob-brand-scan">Scan</span>
+                <Leaf size={14} className="nf-ob-brand-leaf" />
               </div>
+              <div style={{ width: 24 }} /> {/* Spacer to center the brand */}
             </div>
-          </form>
-        </div>
+            {/* Stepper */}
+            <StepIndicator current={step} total={TOTAL_STEPS} />
+
+            {/* Step 1: Age */}
+            {step === 1 && (
+              <>
+                <h2 className="nf-ob-question">What's your Age?</h2>
+                <AgePicker value={profile.age} onChange={(v) => updateProfile({ age: v })} />
+              </>
+            )}
+
+            {/* Step 2: Height */}
+            {step === 2 && (
+              <>
+                <h2 className="nf-ob-question">What's your height?</h2>
+                <HeightPicker value={profile.height} onChange={(v) => updateProfile({ height: v })} />
+              </>
+            )}
+
+            {/* Step 3: Weight */}
+            {step === 3 && (
+              <>
+                <h2 className="nf-ob-question">What's your current weight right now?</h2>
+                <WeightPicker value={profile.weight} onChange={(v) => updateProfile({ weight: v })}
+                  unit={profile.weightUnit} onUnitChange={(u) => updateProfile({ weightUnit: u })} />
+              </>
+            )}
+
+            {/* Step 4: Gender */}
+            {step === 4 && (
+              <>
+                <h2 className="nf-ob-question">What's your gender?</h2>
+                <GenderPicker value={profile.gender} onChange={(v) => updateProfile({ gender: v })} />
+              </>
+            )}
+
+            {/* Step 5: Date of Birth */}
+            {step === 5 && (
+              <>
+                <h2 className="nf-ob-question">What's your date of birth?</h2>
+                <DateOfBirthPicker value={profile.dateOfBirth} onChange={(v) => updateProfile({ dateOfBirth: v })} />
+              </>
+            )}
+          </div>
+
+          <div className="nf-ob-footer">
+            <button className="nf-ob-next-btn" onClick={handleNext}>Next</button>
+          </div>
+        </>
       )}
 
-      {step === 2 && (
+      {step === 6 && (
         <MedicalProfilePage
           userProfile={profile}
           authToken={authToken}
@@ -268,97 +484,18 @@ export default function Onboarding({ onComplete, initialProfile, userAuth, authT
         />
       )}
 
-      {step === 3 && (
-        <HealthGoalsPage
-          userProfile={profile}
-          authToken={authToken}
-          isOnboarding={true}
-          onBack={handleStepBack}
-          onDetailsSaved={handleGoalsSaved}
-        />
+      {step === 7 && (
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%' }}>
+          <HealthGoalsPage
+            userProfile={profile}
+            authToken={authToken}
+            isOnboarding={true}
+            onBack={handleStepBack}
+            onDetailsSaved={handleGoalsSaved}
+          />
+          {error && <p style={{ color: 'red', textAlign: 'center', margin: '16px' }}>{error}</p>}
+        </div>
       )}
-
-      <style dangerouslySetInnerHTML={{
-        __html: `
-        .medical-profile-page, .health-goals-page {
-          background: var(--ns-surface) !important;
-          color: var(--ns-on-surface) !important;
-        }
-        .medical-profile-shell, .health-goals-shell {
-          border: none !important;
-          background: transparent !important;
-          box-shadow: none !important;
-          padding-top: 20px !important;
-        }
-        .medical-profile-header h1, .health-goals-header h1 {
-          color: var(--ns-on-surface) !important;
-          font-weight: 900 !important;
-          font-family: var(--font-headline) !important;
-        }
-        .medical-search-box, .health-goals-search-box {
-          background: white !important;
-          border-color: var(--ns-outline-var) !important;
-          box-shadow: 0 4px 12px rgba(11, 28, 48, 0.06) !important;
-        }
-        .medical-search-box input, .health-goals-search-box input {
-          color: var(--ns-on-surface) !important;
-          font-weight: 700 !important;
-        }
-        .medical-issue-item, .health-goals-list button {
-          background: white !important;
-          border-color: var(--ns-outline-var) !important;
-          color: var(--ns-on-surface) !important;
-          box-shadow: 0 4px 12px rgba(11, 28, 48, 0.04) !important;
-        }
-        .medical-issue-item.is-selected, .health-goals-list button.is-selected {
-          border-color: #4B6F44 !important;
-          background: rgba(75, 111, 68, 0.08) !important;
-          color: #4B6F44 !important;
-        }
-        .medical-save-button, .health-goals-save-button {
-          height: 64px !important;
-          border-radius: 16px !important;
-          background: linear-gradient(135deg, #4B6F44 0%, #4B6F44 100%) !important;
-          box-shadow: 0 12px 30px rgba(75, 111, 68, 0.25) !important;
-          font-size: 1.1rem !important;
-          font-weight: 900 !important;
-          text-transform: none !important;
-          letter-spacing: 0 !important;
-          color: white !important;
-        }
-        .medical-summary-card, .health-goals-summary-card {
-          background: white !important;
-          border-color: var(--ns-outline-var) !important;
-          box-shadow: 0 8px 24px rgba(11, 28, 48, 0.08) !important;
-        }
-        .medical-summary-title, .health-goals-summary-title {
-          color: var(--ns-on-surface) !important;
-          font-weight: 900 !important;
-        }
-        .medical-selected-strip button, .health-goals-selected-strip button {
-          background: rgba(75, 111, 68, 0.12) !important;
-          color: #4B6F44 !important;
-          border: 1px solid rgba(75, 111, 68, 0.3) !important;
-          font-weight: 800 !important;
-        }
-        .medical-issue-item button span, .health-goals-list button span {
-           font-weight: 800 !important;
-           color: var(--ns-on-surface) !important;
-        }
-        .medical-issue-item button strong, .health-goals-list button strong {
-           color: #4B6F44 !important;
-           font-weight: 900 !important;
-        }
-        .personal-detail-row label {
-          color: var(--ns-on-surface-var) !important;
-          font-weight: 700 !important;
-          opacity: 0.8 !important;
-        }
-        .personal-detail-row strong {
-          color: var(--ns-on-surface) !important;
-          font-weight: 900 !important;
-        }
-      `}} />
     </div>
   );
 }

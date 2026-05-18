@@ -2,18 +2,13 @@ import { useState, useMemo, useEffect } from 'react';
 import {
   ArrowLeft,
   TrendingUp,
-  TrendingDown,
   Minus,
-  Calendar,
-  ChevronRight,
-  ChevronLeft,
   Trophy,
   AlertCircle,
   CheckCircle2,
   XCircle,
   Activity,
   Filter,
-  Utensils
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -30,13 +25,13 @@ import {
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
-    const color = data.score >= 70 ? '#4B6F44' : data.score >= 40 ? '#f59e0b' : '#ef4444';
+    const color = data.score >= 8 ? '#4B6F44' : data.score >= 5 ? '#f59e0b' : '#ef4444';
 
     return (
       <div className="trends-tooltip">
         <p className="trends-tooltip-date">{label}</p>
         <div className="trends-tooltip-score" style={{ color }}>
-          <strong>{data.score}</strong>
+          <strong>{data.score.toFixed(1)}</strong>
           <span>Health Score</span>
         </div>
         <div className="trends-tooltip-meta">
@@ -50,7 +45,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 const CustomDot = (props) => {
-  const { cx, cy, stroke, payload, value } = props;
+  const { cx, cy, payload, value } = props;
   const prevValue = payload.prevScore;
 
   if (prevValue === undefined) return <Dot {...props} />;
@@ -95,10 +90,7 @@ export default function Trends({ authToken, onNavigate }) {
   const { t } = useTranslation();
 
   useEffect(() => {
-    fetchHistory();
-  }, [authToken]);
-
-  const fetchHistory = async () => {
+    const fetchHistory = async () => {
     if (!authToken) return;
     try {
       const res = await fetch('http://localhost:5000/scans', {
@@ -111,7 +103,10 @@ export default function Trends({ authToken, onNavigate }) {
     } finally {
       setLoading(false);
     }
-  };
+    };
+
+    fetchHistory();
+  }, [authToken]);
 
   const processedData = useMemo(() => {
     if (!history.length) return [];
@@ -132,47 +127,39 @@ export default function Trends({ authToken, onNavigate }) {
     // Group scans by date string (YYYY-MM-DD)
     const dailyMap = {};
 
-    // Initialize map with all dates in range
-    const iter = new Date(startDate);
-    while (iter <= endDate) {
-      const key = iter.toISOString().split('T')[0];
-      dailyMap[key] = {
-        date: key,
-        displayDate: iter.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
-        scans: [],
-        score: 50, // Start at neutral
-        goodCount: 0,
-        badCount: 0
-      };
-      iter.setDate(iter.getDate() + 1);
-    }
-
     // Fill with scan data
     history.forEach(scan => {
       const scanDate = new Date(scan.created_at || scan.date);
-      const key = scanDate.toISOString().split('T')[0];
+      if (Number.isNaN(scanDate.getTime()) || scanDate < startDate || scanDate > endDate) return;
 
-      if (dailyMap[key]) {
-        dailyMap[key].scans.push(scan);
-        const score = Number(scan.score);
-        if (score >= 8) {
-          dailyMap[key].score += 10;
-          dailyMap[key].goodCount++;
-        } else if (score < 4) {
-          dailyMap[key].score -= 10;
-          dailyMap[key].badCount++;
-        }
+      const key = scanDate.toISOString().split('T')[0];
+      const score = Number(scan.score);
+      if (!Number.isFinite(score) || score <= 0) return;
+
+      if (!dailyMap[key]) {
+        dailyMap[key] = {
+          date: key,
+          displayDate: scanDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+          scans: [],
+          totalScore: 0,
+          goodCount: 0,
+          badCount: 0
+        };
       }
+
+      dailyMap[key].scans.push(scan);
+      dailyMap[key].totalScore += Math.max(1, Math.min(score, 10));
+      if (score >= 8) dailyMap[key].goodCount++;
+      if (score < 4) dailyMap[key].badCount++;
     });
 
-    // Finalize and clamp scores
     const sorted = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
     return sorted.map((day, idx) => {
-      const clampedScore = Math.max(0, Math.min(day.score, 100));
+      const averageScore = day.scans.length ? day.totalScore / day.scans.length : 0;
       return {
         ...day,
-        score: clampedScore,
-        prevScore: idx > 0 ? sorted[idx - 1].score : undefined
+        score: Math.round(averageScore * 10) / 10,
+        prevScore: idx > 0 ? Math.round((sorted[idx - 1].totalScore / sorted[idx - 1].scans.length) * 10) / 10 : undefined
       };
     });
   }, [history, timeRange, customStart, customEnd]);
@@ -189,7 +176,7 @@ export default function Trends({ authToken, onNavigate }) {
       if (day.score > best.score) best = day;
       if (day.score < worst.score) worst = day;
 
-      if (day.score >= 70) {
+      if (day.score >= 8) {
         currentStreak++;
         if (currentStreak > maxStreak) maxStreak = currentStreak;
       } else {
@@ -202,8 +189,8 @@ export default function Trends({ authToken, onNavigate }) {
     let trend = 'Stable';
     if (last3.length >= 2) {
       const delta = last3[last3.length - 1].score - last3[0].score;
-      if (delta > 5) trend = 'Improving';
-      else if (delta < -5) trend = 'Declining';
+      if (delta > 0.5) trend = 'Improving';
+      else if (delta < -0.5) trend = 'Declining';
     }
 
     return { best, worst, trend, maxStreak };
@@ -231,7 +218,7 @@ export default function Trends({ authToken, onNavigate }) {
             <div className="stat-card-info">
               <span>{t('best_day')}</span>
               <strong>{stats?.best.displayDate}</strong>
-              <small>{stats?.best.score} pts</small>
+              <small>{stats?.best.score.toFixed(1)} / 10</small>
             </div>
           </div>
           <div className="stat-card-premium">
@@ -239,7 +226,7 @@ export default function Trends({ authToken, onNavigate }) {
             <div className="stat-card-info">
               <span>{t('worst_day')}</span>
               <strong>{stats?.worst.displayDate}</strong>
-              <small>{stats?.worst.score} pts</small>
+              <small>{stats?.worst.score.toFixed(1)} / 10</small>
             </div>
           </div>
           <div className="stat-card-premium">
@@ -308,7 +295,11 @@ export default function Trends({ authToken, onNavigate }) {
                 <AreaChart
                   data={processedData}
                   margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                  onClick={(data) => data && setSelectedDay(data.activePayload[0].payload)}
+                  onClick={(data) => {
+                    if (data && data.activePayload && data.activePayload.length > 0) {
+                      setSelectedDay(data.activePayload[0].payload);
+                    }
+                  }}
                 >
                   <defs>
                     <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
@@ -325,7 +316,8 @@ export default function Trends({ authToken, onNavigate }) {
                     dy={10}
                   />
                   <YAxis
-                    domain={[0, 100]}
+                    domain={[1, 10]}
+                    ticks={[1, 2, 4, 6, 8, 10]}
                     axisLine={false}
                     tickLine={false}
                     tick={{ fontSize: 10, fill: 'var(--ns-outline)', fontWeight: 600 }}
@@ -362,10 +354,10 @@ export default function Trends({ authToken, onNavigate }) {
               <div>
                 <h2>{new Date(selectedDay.date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</h2>
                 <span className="sheet-score-pill" style={{
-                  background: selectedDay.score >= 70 ? 'rgba(75, 111, 68,0.1)' : selectedDay.score >= 40 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
-                  color: selectedDay.score >= 70 ? '#4B6F44' : selectedDay.score >= 40 ? '#f59e0b' : '#ef4444'
+                  background: selectedDay.score >= 8 ? 'rgba(75, 111, 68,0.1)' : selectedDay.score >= 5 ? 'rgba(245,158,11,0.1)' : 'rgba(239,68,68,0.1)',
+                  color: selectedDay.score >= 8 ? '#4B6F44' : selectedDay.score >= 5 ? '#f59e0b' : '#ef4444'
                 }}>
-                  {selectedDay.score} {t('health_points')}
+                  {selectedDay.score.toFixed(1)} / 10
                 </span>
               </div>
               <button onClick={() => setSelectedDay(null)} className="sheet-close-btn"><XCircle size={24} /></button>
